@@ -3,7 +3,7 @@
 ---
 # FSM 예제 동작 개념 정리
 
-## 1. Toggle FSM (입문) - 기본 2-상태 토글
+## 1. Toggle FSM (입문) - 기본 2-상태 토글 [1. Toggle FSM (입문)](#1-toggle-fsm-입문)
 
 ### 📌 핵심 개념
 - **상태**: OFF → ON → OFF (2개 상태)
@@ -23,7 +23,7 @@
 
 ---
 
-## 2. 시퀀스 FSM (입문) - 4-상태 LED 순차 점등
+## 2. 시퀀스 FSM (입문) - 4-상태 LED 순차 점등 [2. 시퀀스 FSM (입문)](#2-시퀀스-fsm-입문)
 
 ### 📌 핵심 개념
 - **상태**: S0 → S1 → S2 → S3 → S0 (4개 상태)
@@ -43,7 +43,7 @@
 
 ---
 
-## 3. 신호등 FSM (초급) - 3-상태 신호등 제어
+## 3. 신호등 FSM (초급) - 3-상태 신호등 제어 [3. 신호등 FSM (초급)](#3-신호등-fsm-초급)
 
 ### 📌 핵심 개념
 - **상태**: RED → GREEN → YELLOW → RED (3개 상태)
@@ -63,7 +63,7 @@
 
 ---
 
-## 4. 자판기 FSM (중급) - 6-상태 자판기
+## 4. 자판기 FSM (중급) - 6-상태 자판기 [4. 자판기 FSM (중급)](#4-자판기-fsm-중급)
 
 ### 📌 핵심 개념
 - **상태**: IDLE → COIN1 → COIN2 → COIN3 → COIN4 → COIN5 (6개 상태)
@@ -85,7 +85,7 @@
 
 ---
 
-## 5. UART 수신기 FSM (중상급) - 5-상태 UART 통신
+## 5. UART 수신기 FSM (중상급) - 5-상태 UART 통신 [5. UART 수신기 FSM (중상급)](#5-uart-수신기-fsm-중상급)
 
 ### 📌 핵심 개념
 - **상태**: IDLE → START_BIT → DATA_BITS → STOP_BIT → CLEANUP (5개 상태)
@@ -108,7 +108,7 @@
 
 ---
 
-## 6. 엘리베이터 FSM (상급) - 6-상태 엘리베이터 제어
+## 6. 엘리베이터 FSM (상급) - 6-상태 엘리베이터 제어 [6. 엘리베이터 FSM (상급)](#6-엘리베이터-fsm-상급)
 
 ### 📌 핵심 개념
 - **상태**: IDLE → MOVING_UP/DOWN → DOOR_OPENING → DOOR_OPEN_WAIT → DOOR_CLOSING (6개 상태)
@@ -131,7 +131,7 @@
 
 ---
 
-## 7. I2C Master FSM (고급) - 9-상태 I2C 통신
+## 7. I2C Master FSM (고급) - 9-상태 I2C 통신 [7. I2C Master FSM (고급)](#7-i2c-master-fsm-고급)
 
 ### 📌 핵심 개념
 - **상태**: IDLE → START_COND → ADDR_SEND → ADDR_ACK → DATA_WR/RD → ACK → STOP_COND (9개 상태)
@@ -154,7 +154,7 @@
 
 ---
 
-## 8. 게임 FSM (최고급) - 9-상태 반응속도 게임
+## 8. 게임 FSM (최고급) - 9-상태 반응속도 게임 [8. 게임 FSM (최고급)](#8-게임-fsm-최고급)
 
 ### 📌 핵심 개념
 - **상태**: IDLE → READY → WAIT_RANDOM → LED_ON → MEASURING → SUCCESS/FAIL → GAME_OVER (9개 상태)
