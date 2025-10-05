@@ -2080,6 +2080,67 @@ endmodule
 
 ## 5️. UART 수신기 FSM (중상급)
 
+### 📋 테스트 시나리오
+### ✅ 포함된 테스트 (총 10개)
+1. TEST 1: 단일 바이트 수신 (0x55)
+2. TEST 2: 다른 바이트 수신 (0xAA)
+3. TEST 3: All zeros (0x00)
+4. TEST 4: All ones (0xFF)
+5. TEST 5: ASCII 문자 수신 ('A' = 0x41)
+6. TEST 6: 연속 바이트 수신 (0x12, 0x34, 0x56)
+7. TEST 7: Framing Error 테스트 (잘못된 Stop bit)
+8. TEST 8: False Start 감지 및 복구
+9. TEST 9: 리셋 테스트 (수신 중 리셋)
+10. TEST 10: 문자열 수신 ("HELLO")
+
+### 💡 특징
+   * 정확한 UART 타이밍:
+      * 9600 baud = 104.167 μs per bit
+      * Start bit (0) → 8 Data bits (LSB first) → Stop bit (1)
+   * 편리한 태스크 제공:
+      * send_uart_byte: 정상 UART 바이트 전송
+      * send_uart_byte_bad_stop: 잘못된 Stop bit 전송
+      * send_false_start: False start 시뮬레이션
+   * 자동 검증:
+      * 데이터 정확도 확인
+      * Valid 신호 검증
+      * Framing error 감지
+      * 각 테스트 PASS/FAIL 자동 판정
+
+### 🔧 시뮬레이션 실행 방법
+```bash
+# Vivado 시뮬레이터
+xvlog uart_rx_fsm.v
+xvlog tb_uart_rx_fsm.v
+xelab -debug typical tb_uart_rx_fsm -s sim
+xsim sim -gui
+
+# ModelSim
+vlog uart_rx_fsm.v tb_uart_rx_fsm.v
+vsim tb_uart_rx_fsm
+run -all
+```
+
+### 📊 예상 결과
+```
+[TX] Sending UART byte: 0x55 (85)
+[RX] Valid data received: 0x55 (85) 'U'
+TEST 1 PASSED - Received: 0x55
+
+[TX] Sending UART byte: 0x41 (65)
+[RX] Valid data received: 0x41 (65) 'A'
+TEST 5 PASSED - Received: 0x41 ('A')
+
+[TX] Sending UART byte with bad stop bit: 0x88
+[ERROR] Framing error detected!
+TEST 7 PASSED - Framing error detected
+```
+
+### ⚡ 주의 사항
+   * 시뮬레이션 시간이 길 수 있습니다 (각 비트가 104μs)
+   * 전체 테스트는 약 2-3ms 소요
+   * 파형 뷰어에서 UART 타이밍을 확인하세요
+
 ```verilog
 // ========================================
 // 5번 - UART 수신기 FSM (중상급)
