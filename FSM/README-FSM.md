@@ -516,6 +516,41 @@ endmodule
 
 ## 2️. 시퀀스 FSM (입문)
 
+### 📋 테스트 시나리오
+### ✅ 포함된 테스트
+- **TEST 1**: Enable OFF - 동작하지 않음 확인
+- **TEST 2**: Enable ON - 시퀀스 동작 확인 (S0→S1→S2→S3)
+- **TEST 3**: 동작 중 Disable - 시퀀스 멈춤 확인
+- **TEST 4**: Re-enable - 시퀀스 재개 확인
+- **TEST 5**: Reset - S0으로 초기화 확인
+- **TEST 6**: 완전한 사이클 - 순환 동작 확인
+
+### ⚠️ 중요 사항
+- **실제 시뮬레이션을 위해서는 sequence_fsm.v의 카운터 값을 수정해야 합니다:**
+```verilog
+// 원본 (1초 = 100,000,000 클럭)**
+assign tick = (counter == 27'd99_999_999);
+
+// 시뮬레이션용 (100 클럭으로 축소)
+assign tick = (counter == 27'd100);**
+```
+
+### 🔧 시뮬레이션 실행 방법
+```bash
+# 1. 수정된 sequence_fsm.v 사용 (counter를 100으로 변경)
+# 2. 시뮬레이션 실행
+xvlog sequence_fsm.v
+xvlog tb_sequence_fsm.v
+xelab -debug typical tb_sequence_fsm -s sim
+xsim sim -gui
+```
+### 📊 예상 결과
+- **각 상태 전환마다 LED 패턴 표시
+- **S0(0001) → S1(0010) → S2(0100) → S3(1000) → S0 순환
+- **Enable/Disable 제어 확인
+- **Reset 동작 확인
+
+
 ```verilog
 // ========================================
 // 2번 - 시퀀스 FSM (입문)
