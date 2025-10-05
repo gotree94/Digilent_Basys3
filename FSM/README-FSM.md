@@ -3344,6 +3344,7 @@ endmodule
       * 마스터/슬레이브 동작 로그
 
 ### 🔧 시뮬레이션 실행 방법
+
 ```bash
 # Vivado 시뮬레이터
 xvlog i2c_master_fsm.v
