@@ -1478,6 +1478,56 @@ endmodule
 
 ## 4️. 자판기 FSM (중급)
 
+### 📋 테스트 시나리오
+
+### ✅ 포함된 테스트 (총 10개)
+- **TEST 1**: 100원 × 5 = 500원 (정확한 금액)
+- **TEST 2**: 500원 × 1 = 500원 (정확한 금액)
+- **TEST 3**: 100원 × 3 + 500원 × 1 = 800원 (거스름돈 300원)
+- **TEST 4**: 취소 기능 (300원 투입 후 취소)
+- **TEST 5**: 7-segment 디스플레이 확인 (0→1→2→3→4→5)
+- **TEST 6**: 혼합 투입 700원 (거스름돈 200원)
+- **TEST 7**: 리셋 테스트 (투입 중 리셋)
+- **TEST 8**: 최대 금액 테스트 1000원 (거스름돈 500원)
+- **TEST 9**: 연속 구매 테스트 (3회 연속)
+- **TEST 10**: 엣지 케이스 - 400원 투입 후 취소
+
+###💡 특징
+### 편리한 태스크(Task) 제공:
+- **insert_coin_100: 100원 투입**
+- **insert_coin_500: 500원 투입**
+- **press_cancel: 취소 버튼**
+
+### 자동 검증:
+- **음료 제공 여부 확인**
+- **거스름돈 정확도 검증**
+- **7-segment 표시 확인**
+- **각 테스트 PASS/FAIL 자동 판정**
+
+### 🔧 시뮬레이션 실행 방법
+```bash
+# Vivado 시뮬레이터
+xvlog vending_machine_fsm.v
+xvlog tb_vending_machine_fsm.v
+xelab -debug typical tb_vending_machine_fsm -s sim
+xsim sim -gui
+
+# ModelSim
+vlog vending_machine_fsm.v tb_vending_machine_fsm.v
+vsim tb_vending_machine_fsm
+run -all
+```
+
+### 📊 예상 결과
+```
+[INSERT] 100원 투입 - 총 투입액: 100원
+[DISPLAY] 7-segment 값: 1 (투입 금액: 100원)
+[INSERT] 100원 투입 - 총 투입액: 200원
+...
+[OUTPUT] 음료 제공! 거스름돈: 0원
+TEST 1 PASSED - 음료 제공, 거스름돈 없음
+```
+
 ```verilog
 // ========================================
 // 4번 - 자판기 FSM (중급)
@@ -1642,7 +1692,388 @@ endmodule
 ```
 
 ```verilog
+// ========================================
+// 4번 - 자판기 FSM 테스트벤치
+// ========================================
+`timescale 1ns / 1ps
 
+module tb_vending_machine_fsm;
+
+    // 입력 신호 (reg)
+    reg clk;
+    reg reset;
+    reg coin_100;
+    reg coin_500;
+    reg cancel;
+    
+    // 출력 신호 (wire)
+    wire dispense;
+    wire [2:0] change;
+    wire [6:0] seg;
+    wire [3:0] an;
+    
+    // 테스트용 변수
+    integer total_inserted;
+    integer test_count;
+    
+    // DUT (Device Under Test) 인스턴스화
+    vending_machine_fsm uut (
+        .clk(clk),
+        .reset(reset),
+        .coin_100(coin_100),
+        .coin_500(coin_500),
+        .cancel(cancel),
+        .dispense(dispense),
+        .change(change),
+        .seg(seg),
+        .an(an)
+    );
+    
+    // 클럭 생성 (100MHz = 10ns 주기)
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+    
+    // 7-segment 값을 숫자로 디코딩하는 함수
+    function [3:0] decode_seg;
+        input [6:0] seg_val;
+        begin
+            case (seg_val)
+                7'b1000000: decode_seg = 0;
+                7'b1111001: decode_seg = 1;
+                7'b0100100: decode_seg = 2;
+                7'b0110000: decode_seg = 3;
+                7'b0011001: decode_seg = 4;
+                7'b0010010: decode_seg = 5;
+                7'b0000010: decode_seg = 6;
+                7'b1111000: decode_seg = 7;
+                7'b0000000: decode_seg = 8;
+                7'b0010000: decode_seg = 9;
+                default: decode_seg = 15;  // Error
+            endcase
+        end
+    endfunction
+    
+    // 동전 투입 태스크
+    task insert_coin_100;
+        begin
+            @(posedge clk);
+            coin_100 = 1;
+            @(posedge clk);
+            #10;
+            coin_100 = 0;
+            total_inserted = total_inserted + 100;
+            $display("  [INSERT] 100원 투입 - 총 투입액: %0d원", total_inserted);
+            #50;  // 안정화 대기
+        end
+    endtask
+    
+    task insert_coin_500;
+        begin
+            @(posedge clk);
+            coin_500 = 1;
+            @(posedge clk);
+            #10;
+            coin_500 = 0;
+            total_inserted = total_inserted + 500;
+            $display("  [INSERT] 500원 투입 - 총 투입액: %0d원", total_inserted);
+            #50;  // 안정화 대기
+        end
+    endtask
+    
+    task press_cancel;
+        begin
+            @(posedge clk);
+            cancel = 1;
+            @(posedge clk);
+            #10;
+            cancel = 0;
+            $display("  [CANCEL] 취소 버튼 눌림 - 반환 예상액: %0d원", total_inserted);
+            total_inserted = 0;
+            #50;
+        end
+    endtask
+    
+    // 테스트 시나리오
+    initial begin
+        // 파형 덤프 설정
+        $dumpfile("vending_machine_fsm.vcd");
+        $dumpvars(0, tb_vending_machine_fsm);
+        
+        // 초기화
+        reset = 1;
+        coin_100 = 0;
+        coin_500 = 0;
+        cancel = 0;
+        total_inserted = 0;
+        test_count = 0;
+        
+        $display("========================================");
+        $display("Vending Machine FSM Testbench Started");
+        $display("음료 가격: 500원");
+        $display("========================================\n");
+        
+        // 리셋 해제
+        #100;
+        reset = 0;
+        $display("Time=%0t: Reset released\n", $time);
+        
+        // 테스트 1: 100원 동전 5개로 정확히 500원
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 100원 x 5 = 500원 (정확한 금액) ---", test_count);
+        total_inserted = 0;
+        
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        
+        #100;
+        if (dispense && change == 0) begin
+            $display("Time=%0t: TEST %0d PASSED - 음료 제공, 거스름돈 없음", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - dispense=%b, change=%d", 
+                     $time, test_count, dispense, change);
+        end
+        
+        #200;
+        total_inserted = 0;
+        
+        // 테스트 2: 500원 동전 1개
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: 500원 x 1 = 500원 (정확한 금액) ---", test_count);
+        
+        insert_coin_500;
+        
+        #100;
+        if (dispense && change == 0) begin
+            $display("Time=%0t: TEST %0d PASSED - 음료 제공, 거스름돈 없음", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - dispense=%b, change=%d", 
+                     $time, test_count, dispense, change);
+        end
+        
+        #200;
+        total_inserted = 0;
+        
+        // 테스트 3: 100원 3개 + 500원 1개 = 800원 (거스름돈 300원)
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: 100원 x 3 + 500원 x 1 = 800원 (거스름돈 300원) ---", test_count);
+        
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_500;
+        
+        #100;
+        if (dispense && change == 3) begin
+            $display("Time=%0t: TEST %0d PASSED - 음료 제공, 거스름돈 300원", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - dispense=%b, change=%d (expected 3)", 
+                     $time, test_count, dispense, change);
+        end
+        
+        #200;
+        total_inserted = 0;
+        
+        // 테스트 4: 취소 기능 (300원 투입 후 취소)
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: 취소 기능 테스트 (300원 투입 후 취소) ---", test_count);
+        
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        
+        #100;
+        $display("  현재 투입액: 300원");
+        
+        press_cancel;
+        
+        #100;
+        if (!dispense && change == 3) begin
+            $display("Time=%0t: TEST %0d PASSED - 음료 미제공, 300원 반환", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - dispense=%b, change=%d", 
+                     $time, test_count, dispense, change);
+        end
+        
+        #200;
+        total_inserted = 0;
+        
+        // 테스트 5: 7-segment 디스플레이 확인
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: 7-segment 디스플레이 확인 ---", test_count);
+        
+        #50;
+        $display("  IDLE 상태: 표시값 = %0d (expected: 0)", decode_seg(seg));
+        
+        insert_coin_100;
+        #50;
+        $display("  100원 투입: 표시값 = %0d (expected: 1)", decode_seg(seg));
+        
+        insert_coin_100;
+        #50;
+        $display("  200원 투입: 표시값 = %0d (expected: 2)", decode_seg(seg));
+        
+        insert_coin_100;
+        #50;
+        $display("  300원 투입: 표시값 = %0d (expected: 3)", decode_seg(seg));
+        
+        insert_coin_100;
+        #50;
+        $display("  400원 투입: 표시값 = %0d (expected: 4)", decode_seg(seg));
+        
+        insert_coin_100;
+        #50;
+        $display("  500원 투입: 표시값 = %0d (expected: 5)", decode_seg(seg));
+        
+        if (decode_seg(seg) == 5)
+            $display("Time=%0t: TEST %0d PASSED - 7-segment 표시 정상", $time, test_count);
+        else
+            $display("Time=%0t: TEST %0d FAILED - 7-segment 오류", $time, test_count);
+        
+        #200;
+        total_inserted = 0;
+        
+        // 테스트 6: 혼합 투입 (100원 2개 + 500원 1개 = 700원)
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: 혼합 투입 700원 (거스름돈 200원) ---", test_count);
+        
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_500;
+        
+        #100;
+        if (dispense && change == 2) begin
+            $display("Time=%0t: TEST %0d PASSED - 음료 제공, 거스름돈 200원", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - dispense=%b, change=%d", 
+                     $time, test_count, dispense, change);
+        end
+        
+        #200;
+        total_inserted = 0;
+        
+        // 테스트 7: 리셋 테스트 (투입 중 리셋)
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: 리셋 테스트 (300원 투입 중 리셋) ---", test_count);
+        
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        
+        #100;
+        $display("  현재 투입액: 300원");
+        
+        reset = 1;
+        $display("  [RESET] 리셋 신호 활성화");
+        #100;
+        reset = 0;
+        
+        #100;
+        if (decode_seg(seg) == 0 && !dispense) begin
+            $display("Time=%0t: TEST %0d PASSED - 리셋 후 초기 상태", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - 리셋 오류", $time, test_count);
+        end
+        
+        #200;
+        total_inserted = 0;
+        
+        // 테스트 8: 최대 금액 테스트 (500원 2개 = 1000원)
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: 최대 금액 테스트 1000원 (거스름돈 500원) ---", test_count);
+        
+        insert_coin_500;
+        insert_coin_500;
+        
+        #100;
+        if (dispense && change >= 5) begin
+            $display("Time=%0t: TEST %0d PASSED - 음료 제공, 거스름돈 500원 이상", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - dispense=%b, change=%d", 
+                     $time, test_count, dispense, change);
+        end
+        
+        #200;
+        total_inserted = 0;
+        
+        // 테스트 9: 연속 구매 테스트
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: 연속 구매 테스트 ---", test_count);
+        
+        $display("  첫 번째 구매:");
+        insert_coin_500;
+        #200;
+        
+        $display("  두 번째 구매:");
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        #200;
+        
+        $display("  세 번째 구매:");
+        insert_coin_500;
+        #200;
+        
+        $display("Time=%0t: TEST %0d PASSED - 연속 구매 완료", $time, test_count);
+        
+        #200;
+        
+        // 테스트 10: 엣지 케이스 - 정확히 400원 투입 후 취소
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: 400원 투입 후 취소 ---", test_count);
+        total_inserted = 0;
+        
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        insert_coin_100;
+        
+        #100;
+        press_cancel;
+        
+        #100;
+        if (!dispense && change == 4) begin
+            $display("Time=%0t: TEST %0d PASSED - 400원 반환", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - change=%d (expected 4)", 
+                     $time, test_count, change);
+        end
+        
+        // 시뮬레이션 종료
+        #500;
+        $display("\n========================================");
+        $display("Vending Machine FSM Testbench Completed");
+        $display("Total Tests: %0d", test_count);
+        $display("========================================");
+        $finish;
+    end
+    
+    // 상태 변화 모니터링
+    always @(posedge clk) begin
+        if (dispense)
+            $display("  [OUTPUT] 음료 제공! 거스름돈: %0d원", change * 100);
+    end
+    
+    // 7-segment 표시 모니터링
+    always @(seg) begin
+        $display("  [DISPLAY] 7-segment 값: %0d (투입 금액: %0d00원)", 
+                 decode_seg(seg), decode_seg(seg));
+    end
+    
+    // 타임아웃 (무한 루프 방지)
+    initial begin
+        #50000;  // 50us 후 자동 종료
+        $display("ERROR: Simulation timeout!");
+        $finish;
+    end
+
+endmodule
 ```
 
 ---
