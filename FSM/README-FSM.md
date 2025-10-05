@@ -3317,6 +3317,80 @@ endmodule
 
 ## 7️. I2C Master FSM (고급)
 
+### 📋 테스트 시나리오
+### ✅ 포함된 테스트 (총 9개)
+1. TEST 1: 쓰기 동작 - 정상 ACK
+2. TEST 2: 읽기 동작 - 정상 ACK
+3. TEST 3: 주소 NACK (슬레이브 응답 없음)
+4. TEST 4: 데이터 NACK
+5. TEST 5: 다양한 슬레이브 주소 테스트 (0x10, 0x7F)
+6. TEST 6: 연속 쓰기 동작 (3회)
+7. TEST 7: 연속 읽기 동작 (3회)
+8. TEST 8: 리셋 테스트 (전송 중 리셋)
+9. TEST 9: 전체 데이터 범위 테스트 (0x00, 0xFF, 0x55, 0xAA)
+
+### 💡 특징
+   * I2C 슬레이브 시뮬레이터:
+      * i2c_slave_response: 완전한 I2C 슬레이브 동작 시뮬레이션
+      * START/STOP 조건 감지
+      * 주소 및 데이터 ACK/NACK 생성
+      * 읽기/쓰기 모드 모두 지원
+   * 편리한 태스크:
+      * start_i2c_transaction: I2C 전송 시작
+      * wait_for_complete: busy 신호 해제 대기
+   * 실시간 모니터링:
+      * START/STOP 조건 자동 감지
+      * Busy 상태 추적
+      * 마스터/슬레이브 동작 로그
+
+### 🔧 시뮬레이션 실행 방법
+```bash
+# Vivado 시뮬레이터
+xvlog i2c_master_fsm.v
+xvlog tb_i2c_master_fsm.v
+xelab -debug typical tb_i2c_master_fsm -s sim
+xsim sim -gui
+
+# ModelSim
+vlog i2c_master_fsm.v tb_i2c_master_fsm.v
+vsim tb_i2c_master_fsm
+run -all
+```
+
+### 📊 예상 결과
+```
+[MASTER] Transaction started - WRITE, Addr=0x50, Data=0xA5
+  [SLAVE] START condition detected
+  [SLAVE] Address received
+  [SLAVE] Sent ACK for address
+  [SLAVE] WRITE mode - Receiving data
+  [SLAVE] Sent ACK for data
+  [SLAVE] STOP condition detected
+  [MASTER] Transaction completed
+TEST 1 PASSED - Write successful
+
+[MASTER] Transaction started - READ, Addr=0x50, Data=0x00
+  [SLAVE] READ mode - Sending data: 0x5A
+  [MASTER] Read data: 0x5A (Expected: 0x5A)
+TEST 2 PASSED - Read successful
+
+[SLAVE] Sent NACK for address
+TEST 3 PASSED - ACK error detected
+```
+
+### 📡 I2C 프로토콜 검증
+   * ✅ START 조건 (SDA: 1→0 while SCL=1)
+   * ✅ STOP 조건 (SDA: 0→1 while SCL=1)
+   * ✅ 7비트 주소 + R/W 비트
+   * ✅ ACK/NACK 처리
+   * ✅ 데이터 전송 (MSB first)
+   * ✅ 클럭 스트레칭 (옵션)
+
+###⚡ I2C 타이밍
+   * SCL 주파수: 100kHz (10μs 주기)
+   * Quarter period: 2.5μs (CLK_DIV=250)
+   * 완전한 바이트 전송: 약 90μs
+
 ```verilog
 // ========================================
 // 7번 - I2C Master FSM (고급)
