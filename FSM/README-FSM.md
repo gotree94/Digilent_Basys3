@@ -2624,6 +2624,85 @@ endmodule
 
 ## 6️. 엘리베이터 FSM (상급)
 
+### 📋 테스트 시나리오
+### ✅ 포함된 테스트 (총 9개)
+1. TEST 1: 단일 층 상승 이동 (1층 → 3층)
+2. TEST 2: 하강 이동 (3층 → 1층)
+3. TEST 3: 다중 층 순차 방문 (2층, 3층, 4층)
+4. TEST 4: 현재 층 요청 (즉시 도어 개방)
+5. TEST 5: 도어 센서 테스트 (장애물 감지 시 재개방)
+6. TEST 6: 반대 방향 요청 처리 (방향 우선 알고리즘)
+7. TEST 7: 리셋 테스트 (이동 중 리셋)
+8. TEST 8: 연속 요청 처리 (모든 층 요청)
+9. TEST 9: 7-segment 디스플레이 확인
+
+### 💡 특징
+   * 편리한 태스크 제공:
+      * request_floor: 단일 층 요청
+      * request_multiple_floors: 다중 층 동시 요청
+      * wait_for_arrival: 목표 층 도착 대기
+      * wait_for_door_cycle: 도어 개폐 사이클 완료 대기
+   * 실시간 모니터링:
+      * 현재 층 변화 표시 (↑/↓ 방향 표시)
+      * 도어 상태 (열림/닫힘)
+      * 모터 동작 (상승/하강)
+      * 요청 큐 상태
+   * 고급 시나리오:
+      * 도어 센서를 이용한 재개방 테스트
+      * 방향 우선 알고리즘 검증
+      * 요청 큐 관리 확인
+
+### ⚠️ 중요 사항
+   * 실제 시뮬레이션을 위해서는 elevator_fsm.v의 타이머를 축소:
+
+```verilog
+// 원본 (1초 = 100,000,000 클럭)
+assign tick_1sec = (timer == 27'd99_999_999);
+
+// 시뮬레이션용 (1초 = 100 클럭으로 축소)
+assign tick_1sec = (timer == 27'd100);
+```
+
+### 🔧 시뮬레이션 실행 방법
+
+```bash
+# Vivado 시뮬레이터
+xvlog elevator_fsm.v
+xvlog tb_elevator_fsm.v
+xelab -debug typical tb_elevator_fsm -s sim
+xsim sim -gui
+
+# ModelSim
+vlog elevator_fsm.v tb_elevator_fsm.v
+vsim tb_elevator_fsm
+run -all
+```
+
+### 📊 예상 결과
+
+```
+[REQUEST] 3층 호출 버튼 눌림
+  모터 상승 시작 - PASS
+  --> 현재 층: 2층 [↑ ]
+  --> 현재 층: 3층 [↑ ]
+  [ARRIVED] 3층 도착!
+  --> 도어: 열림
+  --> 도어: 닫힘
+TEST 1 PASSED - 3층 도착 및 도어 사이클 완료
+
+[SENSOR] 장애물 감지! 도어 센서 활성화
+  도어 재개방 확인 - PASS
+```
+
+### 🏗️ 테스트 포인트
+   * ✅ 층 이동 정확도
+   * ✅ 도어 개폐 타이밍
+   * ✅ 요청 큐 관리
+   * ✅ 방향 우선 처리
+   * ✅ 안전 기능 (도어 센서)
+   * ✅ 7-segment 표시
+
+
 ```verilog
 // ========================================
 // 6번 - 엘리베이터 FSM (상급)
