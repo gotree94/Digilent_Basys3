@@ -545,10 +545,10 @@ xelab -debug typical tb_sequence_fsm -s sim
 xsim sim -gui
 ```
 ### 📊 예상 결과
-- **각 상태 전환마다 LED 패턴 표시
-- **S0(0001) → S1(0010) → S2(0100) → S3(1000) → S0 순환
-- **Enable/Disable 제어 확인
-- **Reset 동작 확인
+- **각 상태 전환마다 LED 패턴 표시**
+- **S0(0001) → S1(0010) → S2(0100) → S3(1000) → S0 순환**
+- **Enable/Disable 제어 확인**
+- **Reset 동작 확인**
 
 
 ```verilog
@@ -913,6 +913,39 @@ endmodule
 ---
 
 ## 3️. 신호등 FSM (초급)
+
+## 📋 테스트 시나리오
+## ✅ 포함된 테스트
+- **TEST 1**: Enable OFF - 초기 RED 상태 확인
+- **TEST 2**: Full Cycle - 전체 사이클 동작 확인
+- ***RED (5초) → GREEN (5초) → YELLOW (2초) → RED***
+- **TEST 3**: Cycle Repeat - 사이클 반복 동작 확인
+- **TEST 4**: Disable - 동작 멈춤 및 RED 복귀 확인
+- **TEST 5**: Re-enable - 재시작 확인
+- **TEST 6**: Reset - 리셋 기능 확인
+- **TEST 7**: Timing Accuracy - 각 상태의 정확한 시간 확인
+
+## ⚠️ 중요 사항
+- **실제 시뮬레이션을 위해서는 traffic_light_fsm.v의 카운터 값을 수정:**
+```verilog
+// 원본 (1초 = 100,000,000 클럭)
+assign tick_1sec = (counter == 27'd99_999_999);
+
+// 시뮬레이션용 (1초 = 100 클럭으로 축소)
+assign tick_1sec = (counter == 27'd100);
+```
+
+## 📊 예상 동작
+- **RED: 5초 (500ns in simulation)**
+- **GREEN: 5초 (500ns in simulation)**
+- **YELLOW: 2초 (200ns in simulation)**
+- **한 사이클: 12초 (1200ns in simulation)**
+
+##🚦 신호등 상태 표시
+- **테스트벤치는 자동으로 신호등 상태를 표시합니다:
+- ***R=1 Y=0 G=0 [RED]***
+- ***R=0 Y=0 G=1 [GREEN]***
+- ***R=0 Y=1 G=0 [YELLOW]***
 
 ```verilog
 // ========================================
