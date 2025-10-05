@@ -916,14 +916,14 @@ endmodule
 
 ## 📋 테스트 시나리오
 ## ✅ 포함된 테스트
-- **TEST 1**: Enable OFF - 초기 RED 상태 확인
-- **TEST 2**: Full Cycle - 전체 사이클 동작 확인
-- ***RED (5초) → GREEN (5초) → YELLOW (2초) → RED***
-- **TEST 3**: Cycle Repeat - 사이클 반복 동작 확인
-- **TEST 4**: Disable - 동작 멈춤 및 RED 복귀 확인
-- **TEST 5**: Re-enable - 재시작 확인
-- **TEST 6**: Reset - 리셋 기능 확인
-- **TEST 7**: Timing Accuracy - 각 상태의 정확한 시간 확인
+- **1.TEST 1**: Enable OFF - 초기 RED 상태 확인
+- **2.TEST 2**: Full Cycle - 전체 사이클 동작 확인
+- ** -RED (5초) → GREEN (5초) → YELLOW (2초) → RED**
+- **3.TEST 3**: Cycle Repeat - 사이클 반복 동작 확인
+- **4.TEST 4**: Disable - 동작 멈춤 및 RED 복귀 확인
+- **5.TEST 5**: Re-enable - 재시작 확인
+- **6.TEST 6**: Reset - 리셋 기능 확인
+- **7.TEST 7**: Timing Accuracy - 각 상태의 정확한 시간 확인
 
 ## ⚠️ 중요 사항
 - **실제 시뮬레이션을 위해서는 traffic_light_fsm.v의 카운터 값을 수정:**
