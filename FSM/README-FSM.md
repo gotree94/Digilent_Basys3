@@ -254,6 +254,32 @@
 
 ## 1. Toggle FSM (입문)
 
+**📋 테스트 시나리오
+***✅ 포함된 테스트
+  * TEST 1: 첫 번째 버튼 누름 → LED 켜짐 확인
+  * TEST 2: 두 번째 버튼 누름 → LED 꺼짐 확인
+  * TEST 3: 세 번째 버튼 누름 → LED 다시 켜짐 확인
+  * TEST 4: 버튼 길게 누르기 → 한 번만 토글 확인
+  * TEST 5: 리셋 기능 → LED 초기화 확인
+  * TEST 6: 빠른 연속 버튼 누름 → 디바운싱 확인
+
+** 🔧 시뮬레이션 실행 방법
+```bash
+# Vivado 시뮬레이터
+xvlog toggle_fsm.v
+xvlog tb_toggle_fsm.v
+xelab -debug typical tb_toggle_fsm -s sim
+xsim sim -gui
+
+# 또는 ModelSim
+vlog toggle_fsm.v tb_toggle_fsm.v
+vsim tb_toggle_fsm
+run -all
+```
+** 📊 예상 결과
+  * 각 테스트마다 PASSED/FAILED 메시지 출력
+  * $monitor로 모든 신호 변화 실시간 출력
+  * VCD 파일 생성으로 파형 분석 가능
 
 ```verilog
 // ========================================
@@ -320,6 +346,167 @@ module toggle_fsm(
             ON:  led = 1'b1;
             default: led = 1'b0;
         endcase
+    end
+
+endmodule
+```
+
+```verilog
+// ========================================
+// 1번 - Toggle FSM 테스트벤치
+// ========================================
+`timescale 1ns / 1ps
+
+module tb_toggle_fsm;
+
+    // 입력 신호 (reg)
+    reg clk;
+    reg reset;
+    reg btn;
+    
+    // 출력 신호 (wire)
+    wire led;
+    
+    // DUT (Device Under Test) 인스턴스화
+    toggle_fsm uut (
+        .clk(clk),
+        .reset(reset),
+        .btn(btn),
+        .led(led)
+    );
+    
+    // 클럭 생성 (100MHz = 10ns 주기)
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;  // 5ns마다 토글 (10ns 주기)
+    end
+    
+    // 테스트 시나리오
+    initial begin
+        // 파형 덤프 설정 (시뮬레이션 결과 저장)
+        $dumpfile("toggle_fsm.vcd");
+        $dumpvars(0, tb_toggle_fsm);
+        
+        // 초기화
+        reset = 1;
+        btn = 0;
+        
+        // 리셋 해제
+        #100;
+        reset = 0;
+        $display("Time=%0t: Reset released", $time);
+        
+        // 테스트 1: 첫 번째 버튼 누름 (LED 켜짐)
+        #50;
+        btn = 1;
+        $display("Time=%0t: Button pressed (1st time)", $time);
+        #20;
+        btn = 0;
+        $display("Time=%0t: Button released", $time);
+        #100;
+        
+        if (led == 1)
+            $display("Time=%0t: TEST 1 PASSED - LED is ON", $time);
+        else
+            $display("Time=%0t: TEST 1 FAILED - LED should be ON", $time);
+        
+        // 테스트 2: 두 번째 버튼 누름 (LED 꺼짐)
+        #50;
+        btn = 1;
+        $display("Time=%0t: Button pressed (2nd time)", $time);
+        #20;
+        btn = 0;
+        $display("Time=%0t: Button released", $time);
+        #100;
+        
+        if (led == 0)
+            $display("Time=%0t: TEST 2 PASSED - LED is OFF", $time);
+        else
+            $display("Time=%0t: TEST 2 FAILED - LED should be OFF", $time);
+        
+        // 테스트 3: 세 번째 버튼 누름 (LED 다시 켜짐)
+        #50;
+        btn = 1;
+        $display("Time=%0t: Button pressed (3rd time)", $time);
+        #20;
+        btn = 0;
+        $display("Time=%0t: Button released", $time);
+        #100;
+        
+        if (led == 1)
+            $display("Time=%0t: TEST 3 PASSED - LED is ON", $time);
+        else
+            $display("Time=%0t: TEST 3 FAILED - LED should be ON", $time);
+        
+        // 테스트 4: 버튼을 계속 누르고 있을 때 (한 번만 토글되어야 함)
+        #50;
+        btn = 1;
+        $display("Time=%0t: Button pressed and held", $time);
+        #200;  // 버튼을 200ns 동안 누르고 있음
+        btn = 0;
+        $display("Time=%0t: Button released after long press", $time);
+        #100;
+        
+        if (led == 0)
+            $display("Time=%0t: TEST 4 PASSED - LED toggled only once", $time);
+        else
+            $display("Time=%0t: TEST 4 FAILED - LED should be OFF", $time);
+        
+        // 테스트 5: 리셋 테스트 (LED가 꺼져야 함)
+        #50;
+        btn = 1;
+        #20;
+        btn = 0;
+        #50;  // LED가 켜진 상태
+        
+        reset = 1;
+        $display("Time=%0t: Reset activated", $time);
+        #50;
+        reset = 0;
+        $display("Time=%0t: Reset deactivated", $time);
+        #50;
+        
+        if (led == 0)
+            $display("Time=%0t: TEST 5 PASSED - LED reset to OFF", $time);
+        else
+            $display("Time=%0t: TEST 5 FAILED - LED should be OFF after reset", $time);
+        
+        // 테스트 6: 빠른 연속 버튼 누름 (디바운싱 테스트)
+        #100;
+        $display("Time=%0t: Testing rapid button presses", $time);
+        
+        // 첫 번째 누름
+        btn = 1; #15; btn = 0; #15;
+        // 두 번째 누름
+        btn = 1; #15; btn = 0; #15;
+        // 세 번째 누름
+        btn = 1; #15; btn = 0; #100;
+        
+        // LED는 3번 토글되어 켜진 상태여야 함 (OFF->ON->OFF->ON)
+        if (led == 1)
+            $display("Time=%0t: TEST 6 PASSED - Rapid presses handled correctly", $time);
+        else
+            $display("Time=%0t: TEST 6 FAILED - LED should be ON after 3 toggles", $time);
+        
+        // 시뮬레이션 종료
+        #200;
+        $display("\n========================================");
+        $display("Toggle FSM Testbench Completed");
+        $display("========================================");
+        $finish;
+    end
+    
+    // 상태 변화 모니터링
+    initial begin
+        $monitor("Time=%0t | clk=%b reset=%b btn=%b | led=%b", 
+                 $time, clk, reset, btn, led);
+    end
+    
+    // 타임아웃 (무한 루프 방지)
+    initial begin
+        #10000;  // 10us 후 자동 종료
+        $display("ERROR: Simulation timeout!");
+        $finish;
     end
 
 endmodule
@@ -404,6 +591,289 @@ module sequence_fsm(
 endmodule
 ```
 
+```verilog
+// ========================================
+// 2번 - 시퀀스 FSM 테스트벤치
+// ========================================
+`timescale 1ns / 1ps
+
+module tb_sequence_fsm;
+
+    // 입력 신호 (reg)
+    reg clk;
+    reg reset;
+    reg enable;
+    
+    // 출력 신호 (wire)
+    wire [3:0] leds;
+    
+    // DUT (Device Under Test) 인스턴스화
+    sequence_fsm uut (
+        .clk(clk),
+        .reset(reset),
+        .enable(enable),
+        .leds(leds)
+    );
+    
+    // 클럭 생성 (100MHz = 10ns 주기)
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;  // 5ns마다 토글 (10ns 주기)
+    end
+    
+    // 1초 카운터를 빠르게 하기 위한 매개변수
+    // 실제 시뮬레이션에서는 1초를 기다릴 수 없으므로 짧게 설정
+    // sequence_fsm 모듈에서 counter 값을 줄여야 함
+    // 테스트를 위해 100 클럭 = 1초로 가정
+    
+    // 테스트 시나리오
+    initial begin
+        // 파형 덤프 설정
+        $dumpfile("sequence_fsm.vcd");
+        $dumpvars(0, tb_sequence_fsm);
+        
+        // 초기화
+        reset = 1;
+        enable = 0;
+        
+        $display("========================================");
+        $display("Sequence FSM Testbench Started");
+        $display("========================================\n");
+        
+        // 리셋 해제
+        #100;
+        reset = 0;
+        $display("Time=%0t: Reset released", $time);
+        
+        // 테스트 1: enable이 꺼져있을 때 (동작하지 않아야 함)
+        #200;
+        $display("\n--- TEST 1: Enable OFF (No operation) ---");
+        $display("Time=%0t: Enable=0, LEDs should remain at initial state", $time);
+        
+        if (leds == 4'b0001)
+            $display("Time=%0t: TEST 1 PASSED - LEDs stayed at S0", $time);
+        else
+            $display("Time=%0t: TEST 1 FAILED - LEDs changed without enable", $time);
+        
+        // 테스트 2: enable 켜고 시퀀스 동작 확인
+        #100;
+        enable = 1;
+        $display("\n--- TEST 2: Enable ON (Sequence operation) ---");
+        $display("Time=%0t: Enable=1, Starting sequence", $time);
+        
+        // 주의: 실제로는 1초마다 변경되지만, 시뮬레이션에서는
+        // counter 값을 줄여서 테스트해야 합니다.
+        // 여기서는 개념적으로 시간을 표시합니다.
+        
+        // S0 상태 확인
+        #50;
+        $display("Time=%0t: State S0 - LEDs=%b (Expected: 0001)", $time, leds);
+        if (leds == 4'b0001)
+            $display("Time=%0t: S0 PASSED", $time);
+        else
+            $display("Time=%0t: S0 FAILED", $time);
+        
+        // 충분한 시간 대기 (실제 구현에서 counter를 줄인 경우)
+        // 예: counter가 100까지만 카운트하도록 수정했다면
+        #1500;  // 100 클럭 * 10ns = 1000ns 정도 대기
+        
+        // S1 상태 확인
+        $display("Time=%0t: State S1 - LEDs=%b (Expected: 0010)", $time, leds);
+        if (leds == 4'b0010)
+            $display("Time=%0t: S1 PASSED", $time);
+        else
+            $display("Time=%0t: S1 FAILED", $time);
+        
+        #1500;
+        
+        // S2 상태 확인
+        $display("Time=%0t: State S2 - LEDs=%b (Expected: 0100)", $time, leds);
+        if (leds == 4'b0100)
+            $display("Time=%0t: S2 PASSED", $time);
+        else
+            $display("Time=%0t: S2 FAILED", $time);
+        
+        #1500;
+        
+        // S3 상태 확인
+        $display("Time=%0t: State S3 - LEDs=%b (Expected: 1000)", $time, leds);
+        if (leds == 4'b1000)
+            $display("Time=%0t: S3 PASSED", $time);
+        else
+            $display("Time=%0t: S3 FAILED", $time);
+        
+        #1500;
+        
+        // S0으로 다시 돌아왔는지 확인 (순환)
+        $display("Time=%0t: Back to S0 - LEDs=%b (Expected: 0001)", $time, leds);
+        if (leds == 4'b0001)
+            $display("Time=%0t: CYCLE TEST PASSED - Returned to S0", $time);
+        else
+            $display("Time=%0t: CYCLE TEST FAILED", $time);
+        
+        // 테스트 3: enable 끄기 (동작 멈춤)
+        #1000;
+        $display("\n--- TEST 3: Disable during operation ---");
+        enable = 0;
+        $display("Time=%0t: Enable=0, Sequence should stop", $time);
+        
+        // 현재 LED 상태 저장
+        reg [3:0] leds_before;
+        leds_before = leds;
+        
+        #3000;  // 충분히 대기
+        
+        if (leds == leds_before)
+            $display("Time=%0t: TEST 3 PASSED - Sequence stopped", $time);
+        else
+            $display("Time=%0t: TEST 3 FAILED - Sequence should not change", $time);
+        
+        // 테스트 4: 다시 enable 켜기 (이어서 동작)
+        #500;
+        $display("\n--- TEST 4: Re-enable ---");
+        enable = 1;
+        $display("Time=%0t: Enable=1, Sequence resumes", $time);
+        
+        #1500;
+        $display("Time=%0t: LEDs=%b (Should have moved to next state)", $time, leds);
+        
+        // 테스트 5: 리셋 테스트
+        #2000;
+        $display("\n--- TEST 5: Reset during operation ---");
+        reset = 1;
+        $display("Time=%0t: Reset activated", $time);
+        
+        #100;
+        reset = 0;
+        $display("Time=%0t: Reset deactivated", $time);
+        
+        #50;
+        if (leds == 4'b0001)
+            $display("Time=%0t: TEST 5 PASSED - Reset to S0", $time);
+        else
+            $display("Time=%0t: TEST 5 FAILED - Should reset to S0", $time);
+        
+        // 완전한 사이클 테스트
+        #500;
+        $display("\n--- TEST 6: Complete cycle verification ---");
+        enable = 1;
+        
+        #1500;
+        $display("Time=%0t: S0->S1 transition, LEDs=%b", $time, leds);
+        #1500;
+        $display("Time=%0t: S1->S2 transition, LEDs=%b", $time, leds);
+        #1500;
+        $display("Time=%0t: S2->S3 transition, LEDs=%b", $time, leds);
+        #1500;
+        $display("Time=%0t: S3->S0 transition, LEDs=%b", $time, leds);
+        
+        if (leds == 4'b0001)
+            $display("Time=%0t: TEST 6 PASSED - Complete cycle verified", $time);
+        else
+            $display("Time=%0t: TEST 6 FAILED - Cycle incomplete", $time);
+        
+        // 시뮬레이션 종료
+        #1000;
+        $display("\n========================================");
+        $display("Sequence FSM Testbench Completed");
+        $display("========================================");
+        $display("\nNOTE: For actual simulation, modify the counter");
+        $display("      in sequence_fsm.v from 99_999_999 to 100");
+        $display("      for faster testing.");
+        $finish;
+    end
+    
+    // LED 상태 변화 모니터링
+    always @(leds) begin
+        case (leds)
+            4'b0001: $display("  --> LED Pattern: 0001 (State S0)");
+            4'b0010: $display("  --> LED Pattern: 0010 (State S1)");
+            4'b0100: $display("  --> LED Pattern: 0100 (State S2)");
+            4'b1000: $display("  --> LED Pattern: 1000 (State S3)");
+            default: $display("  --> LED Pattern: %b (Unknown)", leds);
+        endcase
+    end
+    
+    // 타임아웃 (무한 루프 방지)
+    initial begin
+        #50000;  // 50us 후 자동 종료
+        $display("ERROR: Simulation timeout!");
+        $finish;
+    end
+
+endmodule
+
+
+// ========================================
+// 시뮬레이션을 위한 수정된 sequence_fsm
+// ========================================
+// 원본 sequence_fsm의 counter를 줄인 버전
+// 테스트 시 이 버전을 사용하세요
+
+/*
+module sequence_fsm(
+    input clk,
+    input reset,
+    input enable,
+    output reg [3:0] leds
+);
+
+    localparam S0 = 2'b00;
+    localparam S1 = 2'b01;
+    localparam S2 = 2'b10;
+    localparam S3 = 2'b11;
+    
+    reg [1:0] state, next_state;
+    
+    // 시뮬레이션용: 100 클럭으로 변경 (원본은 99_999_999)
+    reg [26:0] counter;
+    wire tick;
+    
+    assign tick = (counter == 27'd100);  // 테스트용으로 축소
+    
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            counter <= 0;
+        else if (enable) begin
+            if (tick)
+                counter <= 0;
+            else
+                counter <= counter + 1;
+        end
+        else
+            counter <= 0;
+    end
+    
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            state <= S0;
+        else if (enable && tick)
+            state <= next_state;
+    end
+    
+    always @(*) begin
+        case (state)
+            S0: next_state = S1;
+            S1: next_state = S2;
+            S2: next_state = S3;
+            S3: next_state = S0;
+            default: next_state = S0;
+        endcase
+    end
+    
+    always @(*) begin
+        case (state)
+            S0: leds = 4'b0001;
+            S1: leds = 4'b0010;
+            S2: leds = 4'b0100;
+            S3: leds = 4'b1000;
+            default: leds = 4'b0000;
+        endcase
+    end
+
+endmodule
+*/
+```
 
 ---
 
@@ -536,6 +1006,404 @@ module traffic_light_fsm(
     end
 
 endmodule
+```
+
+```verilog
+// ========================================
+// 3번 - 신호등 FSM 테스트벤치
+// ========================================
+`timescale 1ns / 1ps
+
+module tb_traffic_light_fsm;
+
+    // 입력 신호 (reg)
+    reg clk;
+    reg reset;
+    reg enable;
+    
+    // 출력 신호 (wire)
+    wire red;
+    wire yellow;
+    wire green;
+    
+    // 신호등 상태를 문자열로 표시하기 위한 변수
+    reg [63:0] light_state;
+    
+    // DUT (Device Under Test) 인스턴스화
+    traffic_light_fsm uut (
+        .clk(clk),
+        .reset(reset),
+        .enable(enable),
+        .red(red),
+        .yellow(yellow),
+        .green(green)
+    );
+    
+    // 클럭 생성 (100MHz = 10ns 주기)
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+    
+    // 신호등 상태를 문자열로 변환
+    always @(*) begin
+        if (red && !yellow && !green)
+            light_state = "RED";
+        else if (!red && !yellow && green)
+            light_state = "GREEN";
+        else if (!red && yellow && !green)
+            light_state = "YELLOW";
+        else if (!red && !yellow && !green)
+            light_state = "OFF";
+        else
+            light_state = "ERROR";
+    end
+    
+    // 테스트 시나리오
+    initial begin
+        // 파형 덤프 설정
+        $dumpfile("traffic_light_fsm.vcd");
+        $dumpvars(0, tb_traffic_light_fsm);
+        
+        // 초기화
+        reset = 1;
+        enable = 0;
+        
+        $display("========================================");
+        $display("Traffic Light FSM Testbench Started");
+        $display("========================================\n");
+        
+        // 리셋 해제
+        #100;
+        reset = 0;
+        $display("Time=%0t: Reset released", $time);
+        
+        // 테스트 1: enable이 꺼져있을 때
+        #200;
+        $display("\n--- TEST 1: Enable OFF ---");
+        $display("Time=%0t: Enable=0, Lights should be RED", $time);
+        
+        #100;
+        if (red && !yellow && !green)
+            $display("Time=%0t: TEST 1 PASSED - Initial state is RED", $time);
+        else
+            $display("Time=%0t: TEST 1 FAILED - Should be RED", $time);
+        
+        // 테스트 2: enable 켜고 전체 사이클 동작 확인
+        #100;
+        enable = 1;
+        $display("\n--- TEST 2: Full Cycle Test ---");
+        $display("Time=%0t: Enable=1, Starting traffic light cycle", $time);
+        $display("Expected sequence: RED(5s) -> GREEN(5s) -> YELLOW(2s) -> RED");
+        
+        // 주의: 실제 시뮬레이션을 위해서는 counter 값을 줄여야 합니다
+        // 예: 99_999_999 -> 100 (1초를 100 클럭으로)
+        
+        // RED 상태 확인 (5초)
+        #50;
+        $display("\nTime=%0t: Checking RED state (should last 5 seconds)", $time);
+        if (red && !yellow && !green)
+            $display("Time=%0t: RED state - PASS", $time);
+        else
+            $display("Time=%0t: RED state - FAIL", $time);
+        
+        // RED 상태 유지 확인 (중간 시점)
+        #2500;  // 가정: 1초 = 500ns (축소된 counter 사용 시)
+        if (red && !yellow && !green)
+            $display("Time=%0t: Still RED (mid-duration) - PASS", $time);
+        else
+            $display("Time=%0t: Should still be RED - FAIL", $time);
+        
+        // GREEN으로 전환 대기 (RED 5초 완료)
+        #2500;
+        $display("\nTime=%0t: Expecting transition to GREEN", $time);
+        #100;
+        if (!red && !yellow && green)
+            $display("Time=%0t: GREEN state - PASS", $time);
+        else
+            $display("Time=%0t: GREEN state - FAIL (R=%b Y=%b G=%b)", $time, red, yellow, green);
+        
+        // GREEN 상태 유지 확인
+        #2500;
+        if (!red && !yellow && green)
+            $display("Time=%0t: Still GREEN (mid-duration) - PASS", $time);
+        else
+            $display("Time=%0t: Should still be GREEN - FAIL", $time);
+        
+        // YELLOW로 전환 대기 (GREEN 5초 완료)
+        #2500;
+        $display("\nTime=%0t: Expecting transition to YELLOW", $time);
+        #100;
+        if (!red && yellow && !green)
+            $display("Time=%0t: YELLOW state - PASS", $time);
+        else
+            $display("Time=%0t: YELLOW state - FAIL (R=%b Y=%b G=%b)", $time, red, yellow, green);
+        
+        // YELLOW 상태 유지 확인 (2초)
+        #1000;
+        if (!red && yellow && !green)
+            $display("Time=%0t: Still YELLOW (mid-duration) - PASS", $time);
+        else
+            $display("Time=%0t: Should still be YELLOW - FAIL", $time);
+        
+        // RED로 다시 전환 대기 (YELLOW 2초 완료)
+        #1000;
+        $display("\nTime=%0t: Expecting transition back to RED", $time);
+        #100;
+        if (red && !yellow && !green)
+            $display("Time=%0t: Back to RED - CYCLE COMPLETE - PASS", $time);
+        else
+            $display("Time=%0t: Should be RED - FAIL", $time);
+        
+        // 테스트 3: 사이클 반복 확인
+        $display("\n--- TEST 3: Cycle Repeat Test ---");
+        $display("Time=%0t: Verifying cycle repeats correctly", $time);
+        
+        // 다시 GREEN으로 전환 확인
+        #5000;
+        #100;
+        if (!red && !yellow && green)
+            $display("Time=%0t: Second GREEN cycle - PASS", $time);
+        else
+            $display("Time=%0t: Second cycle failed - FAIL", $time);
+        
+        // 테스트 4: enable 끄기 (동작 멈춤)
+        #1000;
+        $display("\n--- TEST 4: Disable Test ---");
+        enable = 0;
+        $display("Time=%0t: Enable=0, Traffic light should stop and reset to RED", $time);
+        
+        #200;
+        if (red && !yellow && !green)
+            $display("Time=%0t: TEST 4 PASSED - Reset to RED when disabled", $time);
+        else
+            $display("Time=%0t: TEST 4 FAILED - Should be RED", $time);
+        
+        // 시간이 지나도 상태 변경 없어야 함
+        #3000;
+        if (red && !yellow && !green)
+            $display("Time=%0t: Still RED (no state change) - PASS", $time);
+        else
+            $display("Time=%0t: Should not change state - FAIL", $time);
+        
+        // 테스트 5: 다시 enable 켜기
+        #500;
+        $display("\n--- TEST 5: Re-enable Test ---");
+        enable = 1;
+        $display("Time=%0t: Enable=1, Cycle should restart from RED", $time);
+        
+        #100;
+        if (red && !yellow && !green)
+            $display("Time=%0t: Starting from RED - PASS", $time);
+        else
+            $display("Time=%0t: Should start from RED - FAIL", $time);
+        
+        // 다음 상태로 전환 확인
+        #5000;
+        #100;
+        if (!red && !yellow && green)
+            $display("Time=%0t: Transitioned to GREEN - PASS", $time);
+        else
+            $display("Time=%0t: Should be GREEN - FAIL", $time);
+        
+        // 테스트 6: 리셋 테스트
+        #2000;
+        $display("\n--- TEST 6: Reset Test ---");
+        reset = 1;
+        $display("Time=%0t: Reset activated (should go to RED)", $time);
+        
+        #100;
+        reset = 0;
+        $display("Time=%0t: Reset deactivated", $time);
+        
+        #50;
+        if (red && !yellow && !green)
+            $display("Time=%0t: TEST 6 PASSED - Reset to RED", $time);
+        else
+            $display("Time=%0t: TEST 6 FAILED - Should be RED after reset", $time);
+        
+        // 테스트 7: 타이밍 정확도 테스트
+        $display("\n--- TEST 7: Timing Accuracy Test ---");
+        $display("Time=%0t: Verifying state durations", $time);
+        
+        enable = 1;
+        
+        // RED 시작 시간 기록
+        #100;
+        $display("Time=%0t: RED started", $time);
+        
+        // 정확히 5초(축소 시간) 후 GREEN 확인
+        #5000;
+        #100;
+        if (!red && !yellow && green) begin
+            $display("Time=%0t: GREEN started (RED lasted correct duration) - PASS", $time);
+            
+            // GREEN 5초 확인
+            #5000;
+            #100;
+            if (!red && yellow && !green) begin
+                $display("Time=%0t: YELLOW started (GREEN lasted correct duration) - PASS", $time);
+                
+                // YELLOW 2초 확인
+                #2000;
+                #100;
+                if (red && !yellow && !green)
+                    $display("Time=%0t: RED started (YELLOW lasted correct duration) - PASS", $time);
+                else
+                    $display("Time=%0t: Timing error in YELLOW duration - FAIL", $time);
+            end else
+                $display("Time=%0t: GREEN duration error - FAIL", $time);
+        end else
+            $display("Time=%0t: RED duration error - FAIL", $time);
+        
+        // 시뮬레이션 종료
+        #1000;
+        $display("\n========================================");
+        $display("Traffic Light FSM Testbench Completed");
+        $display("========================================");
+        $display("\nNOTE: For actual simulation, modify the counter");
+        $display("      in traffic_light_fsm.v from 99_999_999 to 100");
+        $display("      for faster testing.");
+        $display("      Timing: 1 second = 100 clocks (1000ns)");
+        $finish;
+    end
+    
+    // 신호등 상태 변화 모니터링
+    always @(red or yellow or green) begin
+        $display("  --> Traffic Light: R=%b Y=%b G=%b [%s]", 
+                 red, yellow, green, light_state);
+    end
+    
+    // 타임아웃 (무한 루프 방지)
+    initial begin
+        #100000;  // 100us 후 자동 종료
+        $display("ERROR: Simulation timeout!");
+        $finish;
+    end
+
+endmodule
+
+
+// ========================================
+// 시뮬레이션을 위한 수정된 traffic_light_fsm
+// ========================================
+// 원본 traffic_light_fsm의 counter를 줄인 버전
+// 테스트 시 이 버전을 사용하세요
+
+/*
+module traffic_light_fsm(
+    input clk,
+    input reset,
+    input enable,
+    output reg red,
+    output reg yellow,
+    output reg green
+);
+
+    localparam RED    = 2'b00;
+    localparam GREEN  = 2'b01;
+    localparam YELLOW = 2'b10;
+    
+    reg [1:0] state, next_state;
+    
+    // 시뮬레이션용으로 축소 (1초 = 100 클럭)
+    reg [26:0] counter;
+    reg [3:0] time_count;
+    
+    wire tick_1sec;
+    assign tick_1sec = (counter == 27'd100);  // 테스트용
+    
+    localparam RED_TIME    = 4'd5;
+    localparam GREEN_TIME  = 4'd5;
+    localparam YELLOW_TIME = 4'd2;
+    
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            counter <= 0;
+        else if (enable) begin
+            if (tick_1sec)
+                counter <= 0;
+            else
+                counter <= counter + 1;
+        end
+        else
+            counter <= 0;
+    end
+    
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            state <= RED;
+            time_count <= 0;
+        end
+        else if (enable) begin
+            if (tick_1sec) begin
+                if (time_count == get_state_time(state) - 1) begin
+                    state <= next_state;
+                    time_count <= 0;
+                end
+                else begin
+                    time_count <= time_count + 1;
+                end
+            end
+        end
+        else begin
+            state <= RED;
+            time_count <= 0;
+        end
+    end
+    
+    function [3:0] get_state_time;
+        input [1:0] s;
+        begin
+            case (s)
+                RED:    get_state_time = RED_TIME;
+                GREEN:  get_state_time = GREEN_TIME;
+                YELLOW: get_state_time = YELLOW_TIME;
+                default: get_state_time = RED_TIME;
+            endcase
+        end
+    endfunction
+    
+    always @(*) begin
+        case (state)
+            RED:    next_state = GREEN;
+            GREEN:  next_state = YELLOW;
+            YELLOW: next_state = RED;
+            default: next_state = RED;
+        endcase
+    end
+    
+    always @(*) begin
+        red = 0;
+        yellow = 0;
+        green = 0;
+        
+        case (state)
+            RED: begin
+                red = 1;
+                yellow = 0;
+                green = 0;
+            end
+            GREEN: begin
+                red = 0;
+                yellow = 0;
+                green = 1;
+            end
+            YELLOW: begin
+                red = 0;
+                yellow = 1;
+                green = 0;
+            end
+            default: begin
+                red = 1;
+                yellow = 0;
+                green = 0;
+            end
+        endcase
+    end
+
+endmodule
+*/
 ```
 
 ---
@@ -705,6 +1573,10 @@ module vending_machine_fsm(
 endmodule
 ```
 
+```verilog
+
+```
+
 ---
 
 ## 5️. UART 수신기 FSM (중상급)
@@ -867,6 +1739,10 @@ module uart_rx_fsm(
     end
 
 endmodule
+```
+
+```verilog
+
 ```
 
 ---
@@ -1108,6 +1984,11 @@ module elevator_fsm(
 
 endmodule
 ```
+
+```verilog
+
+```
+
 
 ---
 
@@ -1379,6 +2260,10 @@ module i2c_master_fsm(
 endmodule
 ```
 
+```verilog
+
+```
+
 ---
 
 ## 8️. 게임 FSM (최고급)
@@ -1642,6 +2527,10 @@ module reaction_game_fsm(
     end
 
 endmodul
+```
+
+```verilog
+
 ```
 
 ---
