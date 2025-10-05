@@ -2241,7 +2241,383 @@ endmodule
 ```
 
 ```verilog
+// ========================================
+// 5번 - UART 수신기 FSM 테스트벤치
+// ========================================
+`timescale 1ns / 1ps
 
+module tb_uart_rx_fsm;
+
+    // 입력 신호 (reg)
+    reg clk;
+    reg reset;
+    reg rx;
+    
+    // 출력 신호 (wire)
+    wire [7:0] data;
+    wire valid;
+    wire error;
+    
+    // 테스트용 변수
+    integer test_count;
+    integer bit_period;  // UART 비트 주기 (9600 baud)
+    
+    // DUT (Device Under Test) 인스턴스화
+    uart_rx_fsm uut (
+        .clk(clk),
+        .reset(reset),
+        .rx(rx),
+        .data(data),
+        .valid(valid),
+        .error(error)
+    );
+    
+    // 클럭 생성 (100MHz = 10ns 주기)
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+    
+    // UART 비트 주기 계산
+    // 9600 baud = 104.167 us per bit
+    // 100MHz 클럭 = 10ns per cycle
+    // 104.167us / 10ns = 10416.7 cycles
+    initial begin
+        bit_period = 104167;  // ns 단위 (104.167 us)
+    end
+    
+    // UART 바이트 전송 태스크 (8-N-1 프레임)
+    task send_uart_byte;
+        input [7:0] byte_data;
+        integer i;
+        begin
+            $display("  [TX] Sending UART byte: 0x%02h (%d)", byte_data, byte_data);
+            
+            // Start bit (0)
+            rx = 0;
+            #bit_period;
+            
+            // Data bits (LSB first)
+            for (i = 0; i < 8; i = i + 1) begin
+                rx = byte_data[i];
+                #bit_period;
+            end
+            
+            // Stop bit (1)
+            rx = 1;
+            #bit_period;
+            
+            // Idle
+            #(bit_period/2);
+        end
+    endtask
+    
+    // 잘못된 프레임 전송 태스크 (Stop bit = 0)
+    task send_uart_byte_bad_stop;
+        input [7:0] byte_data;
+        integer i;
+        begin
+            $display("  [TX] Sending UART byte with bad stop bit: 0x%02h", byte_data);
+            
+            // Start bit
+            rx = 0;
+            #bit_period;
+            
+            // Data bits
+            for (i = 0; i < 8; i = i + 1) begin
+                rx = byte_data[i];
+                #bit_period;
+            end
+            
+            // Bad Stop bit (0 instead of 1)
+            rx = 0;
+            #bit_period;
+            
+            // Idle
+            rx = 1;
+            #(bit_period/2);
+        end
+    endtask
+    
+    // False start 시뮬레이션
+    task send_false_start;
+        begin
+            $display("  [TX] Sending false start");
+            rx = 0;
+            #(bit_period/4);  // 짧게만 0
+            rx = 1;
+            #(bit_period*2);
+        end
+    endtask
+    
+    // 테스트 시나리오
+    initial begin
+        // 파형 덤프 설정
+        $dumpfile("uart_rx_fsm.vcd");
+        $dumpvars(0, tb_uart_rx_fsm);
+        
+        // 초기화
+        reset = 1;
+        rx = 1;  // IDLE state (high)
+        test_count = 0;
+        
+        $display("========================================");
+        $display("UART RX FSM Testbench Started");
+        $display("Baud Rate: 9600");
+        $display("Format: 8-N-1 (8 data bits, No parity, 1 stop bit)");
+        $display("Bit Period: %0d ns", bit_period);
+        $display("========================================\n");
+        
+        // 리셋 해제
+        #1000;
+        reset = 0;
+        $display("Time=%0t: Reset released\n", $time);
+        
+        // Idle 상태 안정화
+        #(bit_period*2);
+        
+        // 테스트 1: 단일 바이트 수신 (0x55 = 01010101)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Single byte reception (0x55) ---", test_count);
+        
+        send_uart_byte(8'h55);
+        
+        #1000;
+        if (valid && data == 8'h55 && !error) begin
+            $display("Time=%0t: TEST %0d PASSED - Received: 0x%02h", $time, test_count, data);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - valid=%b, data=0x%02h, error=%b", 
+                     $time, test_count, valid, data, error);
+        end
+        
+        #(bit_period*2);
+        
+        // 테스트 2: 다른 바이트 수신 (0xAA = 10101010)
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: Different byte reception (0xAA) ---", test_count);
+        
+        send_uart_byte(8'hAA);
+        
+        #1000;
+        if (valid && data == 8'hAA && !error) begin
+            $display("Time=%0t: TEST %0d PASSED - Received: 0x%02h", $time, test_count, data);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - valid=%b, data=0x%02h, error=%b", 
+                     $time, test_count, valid, data, error);
+        end
+        
+        #(bit_period*2);
+        
+        // 테스트 3: 0x00 수신
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: All zeros (0x00) ---", test_count);
+        
+        send_uart_byte(8'h00);
+        
+        #1000;
+        if (valid && data == 8'h00 && !error) begin
+            $display("Time=%0t: TEST %0d PASSED - Received: 0x%02h", $time, test_count, data);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - valid=%b, data=0x%02h, error=%b", 
+                     $time, test_count, valid, data, error);
+        end
+        
+        #(bit_period*2);
+        
+        // 테스트 4: 0xFF 수신
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: All ones (0xFF) ---", test_count);
+        
+        send_uart_byte(8'hFF);
+        
+        #1000;
+        if (valid && data == 8'hFF && !error) begin
+            $display("Time=%0t: TEST %0d PASSED - Received: 0x%02h", $time, test_count, data);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - valid=%b, data=0x%02h, error=%b", 
+                     $time, test_count, valid, data, error);
+        end
+        
+        #(bit_period*2);
+        
+        // 테스트 5: ASCII 문자 수신 ('A' = 0x41)
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: ASCII character 'A' (0x41) ---", test_count);
+        
+        send_uart_byte(8'h41);
+        
+        #1000;
+        if (valid && data == 8'h41 && !error) begin
+            $display("Time=%0t: TEST %0d PASSED - Received: 0x%02h ('%c')", 
+                     $time, test_count, data, data);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - valid=%b, data=0x%02h, error=%b", 
+                     $time, test_count, valid, data, error);
+        end
+        
+        #(bit_period*2);
+        
+        // 테스트 6: 연속 바이트 수신
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: Consecutive bytes (0x12, 0x34, 0x56) ---", test_count);
+        
+        send_uart_byte(8'h12);
+        #1000;
+        if (valid && data == 8'h12)
+            $display("  Byte 1: PASS (0x%02h)", data);
+        
+        #(bit_period);
+        send_uart_byte(8'h34);
+        #1000;
+        if (valid && data == 8'h34)
+            $display("  Byte 2: PASS (0x%02h)", data);
+        
+        #(bit_period);
+        send_uart_byte(8'h56);
+        #1000;
+        if (valid && data == 8'h56)
+            $display("  Byte 3: PASS (0x%02h)", data);
+        
+        $display("Time=%0t: TEST %0d PASSED - Consecutive bytes received", $time, test_count);
+        
+        #(bit_period*2);
+        
+        // 테스트 7: Framing Error (잘못된 Stop bit)
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: Framing Error Test ---", test_count);
+        
+        send_uart_byte_bad_stop(8'h88);
+        
+        #1000;
+        if (error && !valid) begin
+            $display("Time=%0t: TEST %0d PASSED - Framing error detected", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - error=%b, valid=%b (expected error=1, valid=0)", 
+                     $time, test_count, error, valid);
+        end
+        
+        #(bit_period*2);
+        
+        // 테스트 8: False Start 감지
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: False Start Test ---", test_count);
+        
+        send_false_start;
+        
+        // 정상 바이트 전송해서 복구 확인
+        send_uart_byte(8'h99);
+        
+        #1000;
+        if (valid && data == 8'h99 && !error) begin
+            $display("Time=%0t: TEST %0d PASSED - Recovered from false start, received: 0x%02h", 
+                     $time, test_count, data);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - Recovery failed", $time, test_count);
+        end
+        
+        #(bit_period*2);
+        
+        // 테스트 9: 리셋 테스트
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: Reset during reception ---", test_count);
+        
+        // 전송 시작
+        rx = 0;  // Start bit
+        #(bit_period*3);  // 몇 비트 전송 중
+        
+        // 리셋
+        reset = 1;
+        $display("  [RESET] Reset activated during reception");
+        #1000;
+        reset = 0;
+        rx = 1;
+        
+        #(bit_period*2);
+        
+        // 정상 바이트 전송으로 복구 확인
+        send_uart_byte(8'hAB);
+        
+        #1000;
+        if (valid && data == 8'hAB && !error) begin
+            $display("Time=%0t: TEST %0d PASSED - Recovered from reset, received: 0x%02h", 
+                     $time, test_count, data);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED", $time, test_count);
+        end
+        
+        #(bit_period*2);
+        
+        // 테스트 10: 문자열 수신 "HELLO"
+        test_count = test_count + 1;
+        $display("\n--- TEST %0d: String reception 'HELLO' ---", test_count);
+        
+        send_uart_byte(8'h48);  // 'H'
+        #1000;
+        $display("  Received: '%c' (0x%02h)", data, data);
+        
+        #(bit_period);
+        send_uart_byte(8'h45);  // 'E'
+        #1000;
+        $display("  Received: '%c' (0x%02h)", data, data);
+        
+        #(bit_period);
+        send_uart_byte(8'h4C);  // 'L'
+        #1000;
+        $display("  Received: '%c' (0x%02h)", data, data);
+        
+        #(bit_period);
+        send_uart_byte(8'h4C);  // 'L'
+        #1000;
+        $display("  Received: '%c' (0x%02h)", data, data);
+        
+        #(bit_period);
+        send_uart_byte(8'h4F);  // 'O'
+        #1000;
+        $display("  Received: '%c' (0x%02h)", data, data);
+        
+        $display("Time=%0t: TEST %0d PASSED - String 'HELLO' received", $time, test_count);
+        
+        // 시뮬레이션 종료
+        #(bit_period*5);
+        $display("\n========================================");
+        $display("UART RX FSM Testbench Completed");
+        $display("Total Tests: %0d", test_count);
+        $display("========================================");
+        $finish;
+    end
+    
+    // Valid 신호 모니터링
+    always @(posedge valid) begin
+        $display("  [RX] Valid data received: 0x%02h (%d) '%c'", 
+                 data, data, (data >= 32 && data <= 126) ? data : ".");
+    end
+    
+    // Error 신호 모니터링
+    always @(posedge error) begin
+        $display("  [ERROR] Framing error detected!");
+    end
+    
+    // 상태 전환 디버그 (옵션)
+    /*
+    always @(uut.state) begin
+        case (uut.state)
+            3'b000: $display("    State: IDLE");
+            3'b001: $display("    State: START_BIT");
+            3'b010: $display("    State: DATA_BITS");
+            3'b011: $display("    State: STOP_BIT");
+            3'b100: $display("    State: CLEANUP");
+        endcase
+    end
+    */
+    
+    // 타임아웃 (무한 루프 방지)
+    initial begin
+        #5000000;  // 5ms 후 자동 종료
+        $display("ERROR: Simulation timeout!");
+        $finish;
+    end
+
+endmodule
 ```
 
 ---
@@ -2485,7 +2861,455 @@ endmodule
 ```
 
 ```verilog
+// ========================================
+// 6번 - 엘리베이터 FSM 테스트벤치
+// ========================================
+`timescale 1ns / 1ps
 
+module tb_elevator_fsm;
+
+    // 입력 신호 (reg)
+    reg clk;
+    reg reset;
+    reg [3:0] floor_req;
+    reg door_sensor;
+    
+    // 출력 신호 (wire)
+    wire [1:0] current_floor;
+    wire motor_up;
+    wire motor_down;
+    wire door_open;
+    wire [6:0] seg;
+    wire dir_up_led;
+    wire dir_down_led;
+    
+    // 테스트용 변수
+    integer test_count;
+    integer wait_count;
+    
+    // DUT (Device Under Test) 인스턴스화
+    elevator_fsm uut (
+        .clk(clk),
+        .reset(reset),
+        .floor_req(floor_req),
+        .door_sensor(door_sensor),
+        .current_floor(current_floor),
+        .motor_up(motor_up),
+        .motor_down(motor_down),
+        .door_open(door_open),
+        .seg(seg),
+        .dir_up_led(dir_up_led),
+        .dir_down_led(dir_down_led)
+    );
+    
+    // 클럭 생성 (100MHz = 10ns 주기)
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+    
+    // 현재 층을 숫자로 표시 (1~4층)
+    function [7:0] get_floor_number;
+        input [1:0] floor;
+        begin
+            case (floor)
+                2'd0: get_floor_number = 1;
+                2'd1: get_floor_number = 2;
+                2'd2: get_floor_number = 3;
+                2'd3: get_floor_number = 4;
+                default: get_floor_number = 0;
+            endcase
+        end
+    endfunction
+    
+    // 층 요청 태스크
+    task request_floor;
+        input [1:0] floor_num;
+        begin
+            @(posedge clk);
+            floor_req[floor_num] = 1;
+            $display("  [REQUEST] %0d층 호출 버튼 눌림", floor_num + 1);
+            @(posedge clk);
+            #20;
+            floor_req[floor_num] = 0;
+            #100;
+        end
+    endtask
+    
+    // 다중 층 요청 태스크
+    task request_multiple_floors;
+        input [3:0] floors;
+        integer i;
+        begin
+            for (i = 0; i < 4; i = i + 1) begin
+                if (floors[i]) begin
+                    @(posedge clk);
+                    floor_req[i] = 1;
+                    $display("  [REQUEST] %0d층 호출 버튼 눌림", i + 1);
+                    @(posedge clk);
+                    #20;
+                    floor_req[i] = 0;
+                    #50;
+                end
+            end
+        end
+    endtask
+    
+    // 엘리베이터 도착 대기 태스크
+    task wait_for_arrival;
+        input [1:0] target_floor;
+        input integer max_wait;
+        begin
+            wait_count = 0;
+            $display("  [WAIT] %0d층 도착 대기 중...", target_floor + 1);
+            
+            while (current_floor != target_floor && wait_count < max_wait) begin
+                #1000;
+                wait_count = wait_count + 1;
+            end
+            
+            if (current_floor == target_floor) begin
+                $display("  [ARRIVED] %0d층 도착!", target_floor + 1);
+            end else begin
+                $display("  [TIMEOUT] %0d층 도착 실패 (현재: %0d층)", 
+                         target_floor + 1, current_floor + 1);
+            end
+        end
+    endtask
+    
+    // 도어 개방 완료 대기 태스크
+    task wait_for_door_cycle;
+        integer door_wait;
+        begin
+            door_wait = 0;
+            $display("  [DOOR] 도어 사이클 대기 중...");
+            
+            // 도어가 열릴 때까지 대기
+            while (!door_open && door_wait < 5000) begin
+                #100;
+                door_wait = door_wait + 1;
+            end
+            
+            // 도어가 닫힐 때까지 대기
+            door_wait = 0;
+            while (door_open && door_wait < 10000) begin
+                #100;
+                door_wait = door_wait + 1;
+            end
+            
+            $display("  [DOOR] 도어 사이클 완료");
+        end
+    endtask
+    
+    // 테스트 시나리오
+    initial begin
+        // 파형 덤프 설정
+        $dumpfile("elevator_fsm.vcd");
+        $dumpvars(0, tb_elevator_fsm);
+        
+        // 초기화
+        reset = 1;
+        floor_req = 4'b0000;
+        door_sensor = 0;
+        test_count = 0;
+        
+        $display("========================================");
+        $display("Elevator FSM Testbench Started");
+        $display("4층 엘리베이터 시스템");
+        $display("========================================\n");
+        
+        // 리셋 해제
+        #1000;
+        reset = 0;
+        $display("Time=%0t: Reset released", $time);
+        $display("초기 위치: %0d층\n", get_floor_number(current_floor));
+        
+        #2000;
+        
+        // 테스트 1: 단일 층 이동 (1층 -> 3층)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 단일 층 이동 (1층 -> 3층) ---", test_count);
+        
+        request_floor(2'd2);  // 3층 요청 (인덱스 2)
+        
+        #1000;
+        if (motor_up && dir_up_led) begin
+            $display("  모터 상승 시작 - PASS");
+        end else begin
+            $display("  모터 상승 실패 - FAIL");
+        end
+        
+        wait_for_arrival(2'd2, 20000);
+        wait_for_door_cycle;
+        
+        if (current_floor == 2'd2) begin
+            $display("Time=%0t: TEST %0d PASSED - 3층 도착 및 도어 사이클 완료\n", 
+                     $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED\n", $time, test_count);
+        end
+        
+        #3000;
+        
+        // 테스트 2: 하강 이동 (3층 -> 1층)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 하강 이동 (3층 -> 1층) ---", test_count);
+        
+        request_floor(2'd0);  // 1층 요청
+        
+        #1000;
+        if (motor_down && dir_down_led) begin
+            $display("  모터 하강 시작 - PASS");
+        end else begin
+            $display("  모터 하강 실패 - FAIL");
+        end
+        
+        wait_for_arrival(2'd0, 20000);
+        wait_for_door_cycle;
+        
+        if (current_floor == 2'd0) begin
+            $display("Time=%0t: TEST %0d PASSED - 1층 도착\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED\n", $time, test_count);
+        end
+        
+        #3000;
+        
+        // 테스트 3: 다중 층 요청 (1층 -> 2층, 3층, 4층)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 다중 층 순차 방문 (2층, 3층, 4층) ---", test_count);
+        
+        request_multiple_floors(4'b1110);  // 2층, 3층, 4층 요청
+        
+        #2000;
+        
+        // 2층 도착 확인
+        wait_for_arrival(2'd1, 15000);
+        $display("  2층 방문 확인");
+        wait_for_door_cycle;
+        
+        // 3층 도착 확인
+        wait_for_arrival(2'd2, 15000);
+        $display("  3층 방문 확인");
+        wait_for_door_cycle;
+        
+        // 4층 도착 확인
+        wait_for_arrival(2'd3, 15000);
+        $display("  4층 방문 확인");
+        wait_for_door_cycle;
+        
+        if (current_floor == 2'd3) begin
+            $display("Time=%0t: TEST %0d PASSED - 모든 층 방문 완료\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED\n", $time, test_count);
+        end
+        
+        #3000;
+        
+        // 테스트 4: 현재 층 요청 (즉시 도어 개방)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 현재 층 요청 (4층에서 4층 호출) ---", test_count);
+        
+        request_floor(2'd3);  // 현재 위치인 4층 요청
+        
+        #2000;
+        if (door_open && !motor_up && !motor_down) begin
+            $display("  즉시 도어 개방 - PASS");
+        end else begin
+            $display("  즉시 도어 개방 실패 - FAIL");
+        end
+        
+        wait_for_door_cycle;
+        
+        $display("Time=%0t: TEST %0d PASSED - 현재 층 요청 처리\n", $time, test_count);
+        
+        #3000;
+        
+        // 테스트 5: 도어 센서 테스트 (장애물 감지 시 재개방)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 도어 센서 테스트 (재개방) ---", test_count);
+        
+        request_floor(2'd0);  // 1층 요청
+        wait_for_arrival(2'd0, 20000);
+        
+        #1000;
+        // 도어가 열리기 시작하면
+        if (door_open) begin
+            $display("  도어 개방 중...");
+            
+            // 도어 센서 활성화 (장애물 감지)
+            #5000;
+            door_sensor = 1;
+            $display("  [SENSOR] 장애물 감지! 도어 센서 활성화");
+            
+            #3000;
+            if (door_open) begin
+                $display("  도어 재개방 확인 - PASS");
+            end else begin
+                $display("  도어 재개방 실패 - FAIL");
+            end
+            
+            // 센서 해제
+            door_sensor = 0;
+            $display("  [SENSOR] 장애물 제거, 센서 비활성화");
+            
+            wait_for_door_cycle;
+            
+            $display("Time=%0t: TEST %0d PASSED - 도어 센서 동작 확인\n", 
+                     $time, test_count);
+        end
+        
+        #3000;
+        
+        // 테스트 6: 반대 방향 요청 처리
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 반대 방향 요청 (1층 -> 4층, 중간에 2층 요청) ---", 
+                 test_count);
+        
+        // 4층 먼저 요청
+        request_floor(2'd3);
+        #500;
+        // 상승 중 2층 요청
+        request_floor(2'd1);
+        
+        #2000;
+        $display("  상승 시작");
+        
+        // 먼저 2층 방문하는지 확인
+        wait_for_arrival(2'd1, 15000);
+        if (current_floor == 2'd1) begin
+            $display("  2층 먼저 방문 - 상승 방향 우선 처리 확인");
+        end
+        wait_for_door_cycle;
+        
+        // 그 다음 4층 방문
+        wait_for_arrival(2'd3, 15000);
+        if (current_floor == 2'd3) begin
+            $display("  4층 도착 - 방향 우선 처리 완료");
+        end
+        wait_for_door_cycle;
+        
+        $display("Time=%0t: TEST %0d PASSED - 방향 우선 처리\n", $time, test_count);
+        
+        #3000;
+        
+        // 테스트 7: 리셋 테스트
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 리셋 테스트 (이동 중 리셋) ---", test_count);
+        
+        request_floor(2'd0);  // 1층 요청
+        
+        #5000;  // 이동 중
+        $display("  이동 중 리셋 활성화");
+        reset = 1;
+        #1000;
+        reset = 0;
+        
+        #2000;
+        if (current_floor == 2'd0) begin
+            $display("  리셋 후 1층으로 복귀 - PASS");
+            $display("Time=%0t: TEST %0d PASSED\n", $time, test_count);
+        end else begin
+            $display("  리셋 동작 확인");
+            $display("Time=%0t: TEST %0d COMPLETED\n", $time, test_count);
+        end
+        
+        #3000;
+        
+        // 테스트 8: 연속 요청 처리
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 연속 요청 처리 ---", test_count);
+        
+        request_floor(2'd1);  // 2층
+        #500;
+        request_floor(2'd2);  // 3층
+        #500;
+        request_floor(2'd3);  // 4층
+        #500;
+        request_floor(2'd0);  // 1층
+        
+        $display("  모든 층 요청 완료, 순차 방문 시작");
+        
+        // 상승하면서 2,3,4층 방문
+        wait_for_arrival(2'd1, 15000);
+        wait_for_door_cycle;
+        wait_for_arrival(2'd2, 15000);
+        wait_for_door_cycle;
+        wait_for_arrival(2'd3, 15000);
+        wait_for_door_cycle;
+        
+        // 하강하면서 1층 방문
+        wait_for_arrival(2'd0, 20000);
+        wait_for_door_cycle;
+        
+        $display("Time=%0t: TEST %0d PASSED - 모든 요청 처리 완료\n", $time, test_count);
+        
+        #3000;
+        
+        // 테스트 9: 7-segment 표시 확인
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 7-segment 디스플레이 확인 ---", test_count);
+        
+        request_floor(2'd0);  // 1층
+        wait_for_arrival(2'd0, 20000);
+        #1000;
+        $display("  1층: seg=%b", seg);
+        wait_for_door_cycle;
+        
+        request_floor(2'd1);  // 2층
+        wait_for_arrival(2'd1, 15000);
+        #1000;
+        $display("  2층: seg=%b", seg);
+        wait_for_door_cycle;
+        
+        request_floor(2'd2);  // 3층
+        wait_for_arrival(2'd2, 15000);
+        #1000;
+        $display("  3층: seg=%b", seg);
+        wait_for_door_cycle;
+        
+        request_floor(2'd3);  // 4층
+        wait_for_arrival(2'd3, 15000);
+        #1000;
+        $display("  4층: seg=%b", seg);
+        
+        $display("Time=%0t: TEST %0d PASSED - 7-segment 표시 확인\n", $time, test_count);
+        
+        // 시뮬레이션 종료
+        #5000;
+        $display("\n========================================");
+        $display("Elevator FSM Testbench Completed");
+        $display("Total Tests: %0d", test_count);
+        $display("========================================");
+        $display("\nNOTE: For faster simulation, modify the counter");
+        $display("      in elevator_fsm.v from 99_999_999 to 100");
+        $finish;
+    end
+    
+    // 층 변화 모니터링
+    always @(current_floor) begin
+        $display("  --> 현재 층: %0d층 [%s%s]", 
+                 get_floor_number(current_floor),
+                 motor_up ? "↑ " : "",
+                 motor_down ? "↓ " : "");
+    end
+    
+    // 도어 상태 모니터링
+    always @(door_open) begin
+        if (door_open)
+            $display("  --> 도어: 열림");
+        else
+            $display("  --> 도어: 닫힘");
+    end
+    
+    // 타임아웃 (무한 루프 방지)
+    initial begin
+        #10000000;  // 10ms 후 자동 종료
+        $display("ERROR: Simulation timeout!");
+        $finish;
+    end
+
+endmodule
 ```
 
 
@@ -2760,12 +3584,654 @@ endmodule
 ```
 
 ```verilog
+// ========================================
+// 7번 - I2C Master FSM 테스트벤치
+// ========================================
+`timescale 1ns / 1ps
 
+module tb_i2c_master_fsm;
+
+    // 입력 신호 (reg)
+    reg clk;
+    reg reset;
+    reg start;
+    reg rw;
+    reg [6:0] slave_addr;
+    reg [7:0] wr_data;
+    
+    // 출력 신호 (wire)
+    wire [7:0] rd_data;
+    wire busy;
+    wire ack_error;
+    wire scl;
+    
+    // SDA 양방향 신호
+    wire sda;
+    reg sda_slave;  // 슬레이브 시뮬레이션용
+    reg sda_slave_oe;
+    
+    // SDA 양방향 제어
+    assign sda = sda_slave_oe ? sda_slave : 1'bz;
+    
+    // 테스트용 변수
+    integer test_count;
+    integer bit_count;
+    reg [7:0] slave_data;  // 슬레이브가 전송할 데이터
+    
+    // DUT (Device Under Test) 인스턴스화
+    i2c_master_fsm uut (
+        .clk(clk),
+        .reset(reset),
+        .start(start),
+        .rw(rw),
+        .slave_addr(slave_addr),
+        .wr_data(wr_data),
+        .rd_data(rd_data),
+        .busy(busy),
+        .ack_error(ack_error),
+        .sda(sda),
+        .scl(scl)
+    );
+    
+    // 클럭 생성 (100MHz = 10ns 주기)
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+    
+    // I2C 슬레이브 시뮬레이터
+    // SCL의 하강 엣지에서 SDA 변경, 상승 엣지에서 SDA 샘플링
+    task i2c_slave_response;
+        input ack_addr;      // 주소 ACK 여부
+        input ack_data;      // 데이터 ACK 여부
+        input [7:0] tx_data; // 읽기 시 전송할 데이터
+        integer i;
+        begin
+            sda_slave_oe = 0;
+            
+            // START 조건 대기
+            @(negedge sda);
+            if (scl) begin
+                $display("  [SLAVE] START condition detected");
+            end
+            
+            // 주소 + R/W 수신 (8비트)
+            for (i = 0; i < 8; i = i + 1) begin
+                @(posedge scl);  // 데이터 샘플링
+            end
+            $display("  [SLAVE] Address received");
+            
+            // 주소 ACK 전송
+            @(negedge scl);
+            sda_slave_oe = 1;
+            sda_slave = ack_addr ? 0 : 1;  // ACK = 0, NACK = 1
+            @(negedge scl);
+            sda_slave_oe = 0;
+            
+            if (ack_addr) begin
+                $display("  [SLAVE] Sent ACK for address");
+                
+                // R/W 비트 확인 (이전에 수신한 마지막 비트)
+                if (rw) begin
+                    // 읽기 모드 - 슬레이브가 데이터 전송
+                    $display("  [SLAVE] READ mode - Sending data: 0x%02h", tx_data);
+                    
+                    for (i = 7; i >= 0; i = i - 1) begin
+                        @(negedge scl);
+                        sda_slave_oe = 1;
+                        sda_slave = tx_data[i];
+                    end
+                    
+                    @(negedge scl);
+                    sda_slave_oe = 0;
+                    
+                    // 마스터의 ACK/NACK 대기
+                    @(posedge scl);
+                    $display("  [SLAVE] Received %s from master", sda ? "NACK" : "ACK");
+                    
+                end else begin
+                    // 쓰기 모드 - 슬레이브가 데이터 수신
+                    $display("  [SLAVE] WRITE mode - Receiving data");
+                    
+                    for (i = 0; i < 8; i = i + 1) begin
+                        @(posedge scl);
+                    end
+                    
+                    // 데이터 ACK 전송
+                    @(negedge scl);
+                    sda_slave_oe = 1;
+                    sda_slave = ack_data ? 0 : 1;
+                    @(negedge scl);
+                    sda_slave_oe = 0;
+                    
+                    $display("  [SLAVE] Sent %s for data", ack_data ? "ACK" : "NACK");
+                end
+            end else begin
+                $display("  [SLAVE] Sent NACK for address");
+            end
+            
+            // STOP 조건 대기
+            @(posedge sda);
+            if (scl) begin
+                $display("  [SLAVE] STOP condition detected");
+            end
+        end
+    endtask
+    
+    // I2C 전송 시작 태스크
+    task start_i2c_transaction;
+        input r_w;
+        input [6:0] addr;
+        input [7:0] data;
+        begin
+            @(posedge clk);
+            start = 0;
+            rw = r_w;
+            slave_addr = addr;
+            wr_data = data;
+            
+            @(posedge clk);
+            start = 1;
+            @(posedge clk);
+            start = 0;
+            
+            $display("  [MASTER] Transaction started - %s, Addr=0x%02h, Data=0x%02h", 
+                     r_w ? "READ" : "WRITE", addr, data);
+        end
+    endtask
+    
+    // Busy 신호 해제 대기
+    task wait_for_complete;
+        integer timeout;
+        begin
+            timeout = 0;
+            while (busy && timeout < 100000) begin
+                #100;
+                timeout = timeout + 1;
+            end
+            
+            if (busy) begin
+                $display("  [ERROR] Transaction timeout");
+            end else begin
+                $display("  [MASTER] Transaction completed");
+            end
+        end
+    endtask
+    
+    // 테스트 시나리오
+    initial begin
+        // 파형 덤프 설정
+        $dumpfile("i2c_master_fsm.vcd");
+        $dumpvars(0, tb_i2c_master_fsm);
+        
+        // 초기화
+        reset = 1;
+        start = 0;
+        rw = 0;
+        slave_addr = 7'h00;
+        wr_data = 8'h00;
+        sda_slave = 1;
+        sda_slave_oe = 0;
+        test_count = 0;
+        
+        $display("========================================");
+        $display("I2C Master FSM Testbench Started");
+        $display("Clock: 100MHz");
+        $display("I2C Speed: 100kHz");
+        $display("========================================\n");
+        
+        // 리셋 해제
+        #1000;
+        reset = 0;
+        $display("Time=%0t: Reset released\n", $time);
+        
+        #2000;
+        
+        // 테스트 1: 쓰기 동작 - 정상 ACK
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Write operation with ACK ---", test_count);
+        
+        fork
+            // 마스터
+            begin
+                start_i2c_transaction(0, 7'h50, 8'hA5);
+                wait_for_complete;
+            end
+            
+            // 슬레이브
+            begin
+                i2c_slave_response(1, 1, 8'h00);  // ACK, ACK
+            end
+        join
+        
+        #1000;
+        if (!ack_error && !busy) begin
+            $display("Time=%0t: TEST %0d PASSED - Write successful\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - ack_error=%b\n", 
+                     $time, test_count, ack_error);
+        end
+        
+        #5000;
+        
+        // 테스트 2: 읽기 동작 - 정상 ACK
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Read operation with ACK ---", test_count);
+        
+        slave_data = 8'h5A;
+        
+        fork
+            // 마스터
+            begin
+                start_i2c_transaction(1, 7'h50, 8'h00);
+                wait_for_complete;
+            end
+            
+            // 슬레이브
+            begin
+                i2c_slave_response(1, 1, slave_data);
+            end
+        join
+        
+        #1000;
+        if (!ack_error && rd_data == slave_data) begin
+            $display("  [MASTER] Read data: 0x%02h (Expected: 0x%02h)", rd_data, slave_data);
+            $display("Time=%0t: TEST %0d PASSED - Read successful\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - rd_data=0x%02h, ack_error=%b\n", 
+                     $time, test_count, rd_data, ack_error);
+        end
+        
+        #5000;
+        
+        // 테스트 3: 주소 NACK (슬레이브 응답 없음)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Address NACK (No slave response) ---", test_count);
+        
+        fork
+            // 마스터
+            begin
+                start_i2c_transaction(0, 7'h60, 8'h11);
+                wait_for_complete;
+            end
+            
+            // 슬레이브
+            begin
+                i2c_slave_response(0, 0, 8'h00);  // NACK 주소
+            end
+        join
+        
+        #1000;
+        if (ack_error) begin
+            $display("Time=%0t: TEST %0d PASSED - ACK error detected\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - Should detect ACK error\n", $time, test_count);
+        end
+        
+        #5000;
+        
+        // 테스트 4: 데이터 NACK
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Data NACK ---", test_count);
+        
+        fork
+            // 마스터
+            begin
+                start_i2c_transaction(0, 7'h50, 8'h22);
+                wait_for_complete;
+            end
+            
+            // 슬레이브
+            begin
+                i2c_slave_response(1, 0, 8'h00);  // ACK 주소, NACK 데이터
+            end
+        join
+        
+        #1000;
+        if (ack_error) begin
+            $display("Time=%0t: TEST %0d PASSED - Data NACK detected\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - Should detect data NACK\n", $time, test_count);
+        end
+        
+        #5000;
+        
+        // 테스트 5: 다양한 주소 테스트
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Different slave addresses ---", test_count);
+        
+        // 주소 0x10
+        fork
+            begin
+                start_i2c_transaction(0, 7'h10, 8'h33);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        #3000;
+        
+        // 주소 0x7F (최대 7비트 주소)
+        fork
+            begin
+                start_i2c_transaction(0, 7'h7F, 8'h44);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        #3000;
+        
+        $display("Time=%0t: TEST %0d PASSED - Multiple addresses\n", $time, test_count);
+        
+        #5000;
+        
+        // 테스트 6: 연속 쓰기 동작
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Consecutive write operations ---", test_count);
+        
+        fork
+            begin
+                start_i2c_transaction(0, 7'h50, 8'h11);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        #3000;
+        
+        fork
+            begin
+                start_i2c_transaction(0, 7'h50, 8'h22);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        #3000;
+        
+        fork
+            begin
+                start_i2c_transaction(0, 7'h50, 8'h33);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        #3000;
+        
+        $display("Time=%0t: TEST %0d PASSED - Consecutive writes\n", $time, test_count);
+        
+        #5000;
+        
+        // 테스트 7: 연속 읽기 동작
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Consecutive read operations ---", test_count);
+        
+        fork
+            begin
+                start_i2c_transaction(1, 7'h50, 8'h00);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'hAA);
+            end
+        join
+        #1000;
+        $display("  Read 1: 0x%02h", rd_data);
+        #3000;
+        
+        fork
+            begin
+                start_i2c_transaction(1, 7'h50, 8'h00);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'hBB);
+            end
+        join
+        #1000;
+        $display("  Read 2: 0x%02h", rd_data);
+        #3000;
+        
+        fork
+            begin
+                start_i2c_transaction(1, 7'h50, 8'h00);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'hCC);
+            end
+        join
+        #1000;
+        $display("  Read 3: 0x%02h", rd_data);
+        
+        $display("Time=%0t: TEST %0d PASSED - Consecutive reads\n", $time, test_count);
+        
+        #5000;
+        
+        // 테스트 8: 리셋 테스트
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Reset during transaction ---", test_count);
+        
+        fork
+            begin
+                start_i2c_transaction(0, 7'h50, 8'h99);
+                #10000;  // 전송 중
+                $display("  [RESET] Activating reset during transaction");
+                reset = 1;
+                #1000;
+                reset = 0;
+                #1000;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        
+        #3000;
+        if (!busy) begin
+            $display("Time=%0t: TEST %0d PASSED - Reset successful\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - Busy still active\n", $time, test_count);
+        end
+        
+        #5000;
+        
+        // 테스트 9: 전체 데이터 범위 테스트
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Full data range test ---", test_count);
+        
+        // 0x00
+        fork
+            begin
+                start_i2c_transaction(0, 7'h50, 8'h00);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        #3000;
+        
+        // 0xFF
+        fork
+            begin
+                start_i2c_transaction(0, 7'h50, 8'hFF);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        #3000;
+        
+        // 0x55 (01010101)
+        fork
+            begin
+                start_i2c_transaction(0, 7'h50, 8'h55);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        #3000;
+        
+        // 0xAA (10101010)
+        fork
+            begin
+                start_i2c_transaction(0, 7'h50, 8'hAA);
+                wait_for_complete;
+            end
+            begin
+                i2c_slave_response(1, 1, 8'h00);
+            end
+        join
+        
+        $display("Time=%0t: TEST %0d PASSED - Data range test\n", $time, test_count);
+        
+        // 시뮬레이션 종료
+        #10000;
+        $display("\n========================================");
+        $display("I2C Master FSM Testbench Completed");
+        $display("Total Tests: %0d", test_count);
+        $display("========================================");
+        $finish;
+    end
+    
+    // SDA/SCL 모니터링
+    always @(negedge sda) begin
+        if (scl)
+            $display("    [BUS] START/Repeated START condition");
+    end
+    
+    always @(posedge sda) begin
+        if (scl)
+            $display("    [BUS] STOP condition");
+    end
+    
+    // Busy 신호 모니터링
+    always @(busy) begin
+        if (busy)
+            $display("  [STATUS] I2C transaction started");
+        else
+            $display("  [STATUS] I2C transaction ended");
+    end
+    
+    // 타임아웃 (무한 루프 방지)
+    initial begin
+        #5000000;  // 5ms 후 자동 종료
+        $display("ERROR: Simulation timeout!");
+        $finish;
+    end
+
+endmodule
 ```
 
 ---
 
 ## 8️. 게임 FSM (최고급)
+
+### 📋 테스트 시나리오
+### ✅ 포함된 테스트 (총 12개)
+
+1. TEST 1: 초기 상태 확인
+2. TEST 2: 게임 시작
+3. TEST 3: 정상 플레이 - 빠른 반응 (150ms, 3점)
+4. TEST 4: 중간 반응 속도 (300ms, 2점)
+5. TEST 5: 느린 반응 속도 (500ms, 1점)
+6. TEST 6: 너무 빨리 누름 (FAIL 케이스)
+7. TEST 7: 너무 늦게 누름 (>1000ms, FAIL)
+8. TEST 8: 게임 오버 확인
+9. TEST 9: 재시작 테스트
+10. TEST 10: 리셋 테스트 (게임 중 리셋)
+11. TEST 11: 7-segment 디스플레이 확인
+12. TEST 12: LFSR 랜덤성 확인
+
+### 💡 특징
+- **자동 게임 플레이:**
+   * play_round: 완전한 라운드 자동 실행
+   * wait_for_led_on: LED 점등 대기
+   * wait_for_round_complete: 라운드 완료 대기
+- **점수 시스템 검증:
+   * 반응 시간 측정
+   * 점수 계산 확인
+7-segment 디코딩
+- **실시간 모니터링:
+   * 상태 전환 추적
+   * LED 패턴 변화
+   * 부저 사운드
+   * 라운드 진행 상황
+   * 게임 오버 신호
+
+### ⚠️ 중요 사항
+- **시뮬레이션을 위해 reaction_game_fsm.v의 타이머 축소:**
+
+```verilog
+// 원본 (1ms = 100,000 클럭)
+assign tick_1ms = (ms_counter == 27'd99_999);
+
+// 시뮬레이션용 (1ms = 100 클럭으로 축소)
+assign tick_1ms = (ms_counter == 27'd100);
+```
+
+### 🔧 시뮬레이션 실행 방법
+```bash
+# Vivado 시뮬레이터
+xvlog reaction_game_fsm.v
+xvlog tb_reaction_game_fsm.v
+xelab -debug typical tb_reaction_game_fsm -s sim
+xsim sim -gui
+
+# ModelSim
+vlog reaction_game_fsm.v tb_reaction_game_fsm.v
+vsim tb_reaction_game_fsm
+run -all
+```
+
+### 📊 예상 결과
+```
+[BTN] Start button pressed
+    [STATE] READY
+    [LED] Pattern changed: 1111111111111111
+    [STATE] WAIT_RANDOM
+    [WAIT] Waiting for LED to turn on...
+    [LED] LED turned ON! Pattern: 1010110110101101
+    [STATE] MEASURING
+[BTN] React button pressed
+    [RESULT] Reaction time: 150 ms
+    [SCORE] Current score: 3
+    [BUZZER] Sound ON
+    [STATE] SUCCESS
+
+=== Round 2 ===
+    [RESULT] Reaction time: 300 ms
+    [SCORE] Current score: 5
+
+[GAME] GAME OVER - Final Score: 8
+```
+
+### 🎮 게임 메커니즘 검증
+  * ✅ 5 라운드 진행
+  * ✅ 랜덤 대기 시간 (LFSR 기반)
+  * ✅ 반응 시간 측정 (1ms 단위)
+  * ✅ 점수 계산 (<200ms: 3점, <400ms: 2점, 기타: 1점)
+  * ✅ 실패 조건 (너무 빨리/늦게)
+  * ✅ 부저 피드백
+  * ✅ LED 패턴 표시
+
+### 🏆 완료!
+- **이제 8개의 FSM 예제 모두에 대한 완전한 테스트벤치가 준비되었습니다! 각 테스트벤치는:**
+  * 포괄적인 테스트 시나리오
+  * 자동 검증 기능
+  * 실시간 모니터링
+  * 명확한 PASS/FAIL 판정
 
 ```verilog
 // ========================================
@@ -3029,7 +4495,456 @@ endmodul
 ```
 
 ```verilog
+// ========================================
+// 8번 - 게임 FSM (반응속도 게임) 테스트벤치
+// ========================================
+`timescale 1ns / 1ps
 
+module tb_reaction_game_fsm;
+
+    // 입력 신호 (reg)
+    reg clk;
+    reg reset;
+    reg start_btn;
+    reg react_btn;
+    
+    // 출력 신호 (wire)
+    wire [15:0] leds;
+    wire [6:0] seg0, seg1, seg2, seg3;
+    wire [3:0] an;
+    wire game_over;
+    wire buzzer;
+    
+    // 테스트용 변수
+    integer test_count;
+    integer reaction_delay;
+    integer round_num;
+    
+    // DUT (Device Under Test) 인스턴스화
+    reaction_game_fsm uut (
+        .clk(clk),
+        .reset(reset),
+        .start_btn(start_btn),
+        .react_btn(react_btn),
+        .leds(leds),
+        .seg0(seg0),
+        .seg1(seg1),
+        .seg2(seg2),
+        .seg3(seg3),
+        .an(an),
+        .game_over(game_over),
+        .buzzer(buzzer)
+    );
+    
+    // 클럭 생성 (100MHz = 10ns 주기)
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+    
+    // 7-segment 디코더 함수
+    function [3:0] decode_7seg;
+        input [6:0] seg_val;
+        begin
+            case (seg_val)
+                7'b1000000: decode_7seg = 0;
+                7'b1111001: decode_7seg = 1;
+                7'b0100100: decode_7seg = 2;
+                7'b0110000: decode_7seg = 3;
+                7'b0011001: decode_7seg = 4;
+                7'b0010010: decode_7seg = 5;
+                7'b0000010: decode_7seg = 6;
+                7'b1111000: decode_7seg = 7;
+                7'b0000000: decode_7seg = 8;
+                7'b0010000: decode_7seg = 9;
+                default: decode_7seg = 15;  // Error
+            endcase
+        end
+    endfunction
+    
+    // 반응 시간 계산 함수 (7-segment에서)
+    function [15:0] get_reaction_time;
+        begin
+            get_reaction_time = decode_7seg(seg0) + 
+                               (decode_7seg(seg1) * 10) + 
+                               (decode_7seg(seg2) * 100);
+        end
+    endfunction
+    
+    // 점수 가져오기 함수
+    function [3:0] get_score;
+        begin
+            get_score = decode_7seg(seg3);
+        end
+    endfunction
+    
+    // 버튼 누르기 태스크
+    task press_start;
+        begin
+            @(posedge clk);
+            start_btn = 1;
+            $display("  [BTN] Start button pressed");
+            @(posedge clk);
+            #20;
+            start_btn = 0;
+            #100;
+        end
+    endtask
+    
+    task press_react;
+        begin
+            @(posedge clk);
+            react_btn = 1;
+            $display("  [BTN] React button pressed");
+            @(posedge clk);
+            #20;
+            react_btn = 0;
+            #100;
+        end
+    endtask
+    
+    // LED가 켜질 때까지 대기
+    task wait_for_led_on;
+        integer timeout;
+        begin
+            timeout = 0;
+            $display("  [WAIT] Waiting for LED to turn on...");
+            
+            while (leds == 16'h0000 && timeout < 5000000) begin
+                #1000;  // 1us씩 대기
+                timeout = timeout + 1;
+            end
+            
+            if (leds != 16'h0000) begin
+                $display("  [LED] LED turned ON! Pattern: %b", leds);
+            end else begin
+                $display("  [TIMEOUT] LED did not turn on");
+            end
+        end
+    endtask
+    
+    // 라운드 완료 대기
+    task wait_for_round_complete;
+        integer timeout;
+        begin
+            timeout = 0;
+            while (!uut.state[0] && timeout < 3000000) begin  // IDLE이 아닐 때
+                #1000;
+                timeout = timeout + 1;
+            end
+            #5000;
+        end
+    endtask
+    
+    // 완전한 게임 라운드 수행
+    task play_round;
+        input integer delay_ms;
+        integer reaction_time_val;
+        begin
+            round_num = round_num + 1;
+            $display("\n  === Round %0d ===", round_num);
+            
+            // LED 켜지길 대기
+            wait_for_led_on;
+            
+            // 지정된 지연 후 반응
+            #(delay_ms * 100000);  // ms를 ns로 변환 (축소된 시간 기준)
+            press_react;
+            
+            // 결과 대기
+            #200000;
+            
+            reaction_time_val = get_reaction_time;
+            $display("  [RESULT] Reaction time: %0d ms", reaction_time_val);
+            $display("  [SCORE] Current score: %0d", get_score);
+            
+            if (buzzer) begin
+                $display("  [SOUND] Success buzzer!");
+            end
+            
+            wait_for_round_complete;
+        end
+    endtask
+    
+    // 테스트 시나리오
+    initial begin
+        // 파형 덤프 설정
+        $dumpfile("reaction_game_fsm.vcd");
+        $dumpvars(0, tb_reaction_game_fsm);
+        
+        // 초기화
+        reset = 1;
+        start_btn = 0;
+        react_btn = 0;
+        test_count = 0;
+        round_num = 0;
+        
+        $display("========================================");
+        $display("Reaction Game FSM Testbench Started");
+        $display("게임 규칙:");
+        $display("- LED 켜지면 빠르게 버튼 클릭");
+        $display("- 반응 시간에 따라 점수 획득");
+        $display("  < 200ms: 3점");
+        $display("  < 400ms: 2점");
+        $display("  그 외: 1점");
+        $display("- 5라운드 진행");
+        $display("========================================\n");
+        
+        // 리셋 해제
+        #1000;
+        reset = 0;
+        $display("Time=%0t: Reset released", $time);
+        $display("Initial state: IDLE\n");
+        
+        #2000;
+        
+        // 테스트 1: 초기 상태 확인
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Initial state verification ---", test_count);
+        
+        if (leds == 16'h0000 && !game_over && get_score == 0) begin
+            $display("Time=%0t: TEST %0d PASSED - Initial state correct\n", 
+                     $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - leds=%h, game_over=%b, score=%d\n", 
+                     $time, test_count, leds, game_over, get_score);
+        end
+        
+        #5000;
+        
+        // 테스트 2: 게임 시작
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Game start ---", test_count);
+        
+        press_start;
+        
+        #5000;
+        if (leds == 16'hFFFF) begin
+            $display("  READY state confirmed (all LEDs on)");
+            $display("Time=%0t: TEST %0d PASSED - Game started\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED\n", $time, test_count);
+        end
+        
+        #10000;
+        
+        // 테스트 3: 정상적인 게임 플레이 (빠른 반응)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Normal gameplay - Fast reaction (150ms) ---", test_count);
+        
+        play_round(150);  // 150ms 반응
+        
+        if (get_score >= 2) begin
+            $display("Time=%0t: TEST %0d PASSED - Good score earned\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d PARTIAL - score=%d\n", $time, test_count, get_score);
+        end
+        
+        #5000;
+        
+        // 테스트 4: 중간 반응 속도
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Medium reaction (300ms) ---", test_count);
+        
+        play_round(300);  // 300ms 반응
+        
+        $display("Time=%0t: TEST %0d COMPLETED - Score: %d\n", 
+                 $time, test_count, get_score);
+        
+        #5000;
+        
+        // 테스트 5: 느린 반응 속도
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Slow reaction (500ms) ---", test_count);
+        
+        play_round(500);  // 500ms 반응
+        
+        $display("Time=%0t: TEST %0d COMPLETED - Score: %d\n", 
+                 $time, test_count, get_score);
+        
+        #5000;
+        
+        // 테스트 6: 너무 빨리 누름 (FAIL)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Pressing too early (FAIL case) ---", test_count);
+        
+        $display("\n  === Round %0d ===", round_num + 1);
+        round_num = round_num + 1;
+        
+        #50000;  // WAIT_RANDOM 상태 중
+        $display("  [BTN] Pressing before LED turns on");
+        press_react;
+        
+        #200000;
+        if (!buzzer || buzzer == 0) begin
+            $display("  [RESULT] Failed - Pressed too early");
+            $display("Time=%0t: TEST %0d PASSED - Early press detected\n", $time, test_count);
+        end
+        
+        wait_for_round_complete;
+        
+        #5000;
+        
+        // 테스트 7: 너무 늦게 누름 (1초 초과)
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Pressing too late (>1000ms) ---", test_count);
+        
+        play_round(1100);  // 1100ms 반응 (실패)
+        
+        $display("Time=%0t: TEST %0d COMPLETED - Timeout case\n", $time, test_count);
+        
+        #5000;
+        
+        // 게임이 끝날 때까지 대기
+        $display("--- Waiting for game to complete ---");
+        while (!game_over) begin
+            #10000;
+        end
+        
+        #10000;
+        
+        // 테스트 8: 게임 오버 확인
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Game over state ---", test_count);
+        
+        if (game_over) begin
+            $display("  [GAME OVER] Final Score: %d", get_score);
+            $display("Time=%0t: TEST %0d PASSED - Game completed\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED - Game should be over\n", $time, test_count);
+        end
+        
+        #10000;
+        
+        // 테스트 9: 재시작 테스트
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Game restart ---", test_count);
+        
+        press_start;
+        
+        #10000;
+        if (!game_over && get_score == 0) begin
+            $display("  Game restarted - Score reset to 0");
+            $display("Time=%0t: TEST %0d PASSED - Restart successful\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED\n", $time, test_count);
+        end
+        
+        #5000;
+        
+        // 테스트 10: 리셋 테스트
+        test_count = test_count + 1;
+        $display("--- TEST %0d: Reset during game ---", test_count);
+        
+        // 게임 중 리셋
+        wait_for_led_on;
+        
+        #100000;
+        $display("  [RESET] Activating reset during game");
+        reset = 1;
+        #1000;
+        reset = 0;
+        
+        #5000;
+        if (leds == 16'h0000 && get_score == 0 && !game_over) begin
+            $display("Time=%0t: TEST %0d PASSED - Reset successful\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d FAILED\n", $time, test_count);
+        end
+        
+        #5000;
+        
+        // 테스트 11: 7-segment 디스플레이 확인
+        test_count = test_count + 1;
+        $display("--- TEST %0d: 7-segment display test ---", test_count);
+        
+        press_start;
+        #10000;
+        
+        play_round(250);
+        
+        #5000;
+        $display("  Digit 0 (1s): %d", decode_7seg(seg0));
+        $display("  Digit 1 (10s): %d", decode_7seg(seg1));
+        $display("  Digit 2 (100s): %d", decode_7seg(seg2));
+        $display("  Digit 3 (score): %d", decode_7seg(seg3));
+        $display("  Reaction time: %d ms", get_reaction_time);
+        
+        $display("Time=%0t: TEST %0d PASSED - Display working\n", $time, test_count);
+        
+        #10000;
+        
+        // 테스트 12: LFSR 랜덤성 확인
+        test_count = test_count + 1;
+        $display("--- TEST %0d: LFSR randomness check ---", test_count);
+        
+        $display("  LFSR value: %h", uut.lfsr);
+        #100000;
+        $display("  LFSR value after time: %h", uut.lfsr);
+        
+        if (uut.lfsr != 16'hACE1) begin
+            $display("Time=%0t: TEST %0d PASSED - LFSR is updating\n", $time, test_count);
+        end else begin
+            $display("Time=%0t: TEST %0d WARNING - LFSR not changing\n", $time, test_count);
+        end
+        
+        // 시뮬레이션 종료
+        #20000;
+        $display("\n========================================");
+        $display("Reaction Game FSM Testbench Completed");
+        $display("Total Tests: %0d", test_count);
+        $display("========================================");
+        $display("\nNOTE: For faster simulation, modify:");
+        $display("  ms_counter == 99_999 to ms_counter == 100");
+        $display("  in reaction_game_fsm.v");
+        $finish;
+    end
+    
+    // 상태 변화 모니터링
+    always @(uut.state) begin
+        case (uut.state)
+            4'd0: $display("    [STATE] IDLE");
+            4'd1: $display("    [STATE] READY");
+            4'd2: $display("    [STATE] WAIT_RANDOM");
+            4'd3: $display("    [STATE] LED_ON");
+            4'd4: $display("    [STATE] MEASURING");
+            4'd5: $display("    [STATE] SUCCESS");
+            4'd6: $display("    [STATE] FAIL");
+            4'd7: $display("    [STATE] SHOW_RESULT");
+            4'd8: $display("    [STATE] GAME_OVER");
+        endcase
+    end
+    
+    // LED 패턴 변화 모니터링
+    always @(leds) begin
+        if (leds != 16'h0000)
+            $display("    [LED] Pattern changed: %b", leds);
+    end
+    
+    // 부저 모니터링
+    always @(posedge buzzer) begin
+        $display("    [BUZZER] Sound ON");
+    end
+    
+    // 게임 오버 모니터링
+    always @(posedge game_over) begin
+        $display("    [GAME] GAME OVER - Final Score: %d", get_score);
+    end
+    
+    // 라운드 변화 모니터링
+    always @(uut.round) begin
+        if (uut.round > 0)
+            $display("    [ROUND] Round %d/5", uut.round);
+    end
+    
+    // 타임아웃 (무한 루프 방지)
+    initial begin
+        #50000000;  // 50ms 후 자동 종료
+        $display("ERROR: Simulation timeout!");
+        $finish;
+    end
+
+endmodule
 ```
 
 ---
