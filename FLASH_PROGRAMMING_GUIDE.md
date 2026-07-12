@@ -2,7 +2,7 @@
 
 ## 개요
 
-Basys 3 보드는 Xilinx XC7A35T FPGA와 Quad SPI Flash (Winbond W25Q128, 16MB)를 탑재하고 있습니다.
+Basys 3 보드는 Xilinx XC7A35T FPGA와 Quad SPI Flash (Winbond W25Q128, 16MB)를 탑재하고 있습니다. <br>
 `.bit` 파일을 `.mcs`로 변환한 후 SPI Flash에 기록하면 전원을 껐다 켜도 설계가 자동으로 로드됩니다.
 
 ---
