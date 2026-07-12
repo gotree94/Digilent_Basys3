@@ -48,7 +48,7 @@ Hardware Manager Tcl 콘솔에서:
 
 ```tcl
 cd "C:/Users/Administrator/Desktop/Basys-3-GPIO-hw.xpr/hw"
-write_cfgmem -format MCS -size 16 -interface BPIx16 -loadbit "0x0 ./hw.runs/impl_1/GPIO_demo.bit" -file ./flash_output.mcs -force
+write_cfgmem -format MCS -size 16 -interface SPIx4 -loadbit "up 0x0 ./hw.runs/impl_1/GPIO_demo.bit" -file ./flash_output.mcs -force
 ```
 
 > **참고:** Basys 3는 QSPI이므로 interface는 자동 감지됩니다.
