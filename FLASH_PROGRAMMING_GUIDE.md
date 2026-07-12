@@ -1,9 +1,20 @@
-# Basys 3 <br> Quad SPI Flash Programming Guide
+# Basys 3 Quad SPI Flash Programming Guide
 
 ## 개요
 
-Basys 3 보드는 Xilinx XC7A35T FPGA와 Quad SPI Flash (Winbond W25Q128, 16MB)를 탑재하고 있습니다. <br>
+Basys 3 보드는 Xilinx XC7A35T FPGA와 Quad SPI Flash (Macronix MX25L3273F, 32Mbit/4MB)를 탑재하고 있습니다.
 `.bit` 파일을 `.mcs`로 변환한 후 SPI Flash에 기록하면 전원을 껐다 켜도 설계가 자동으로 로드됩니다.
+
+---
+
+## MCS vs PRM 파일 차이
+
+| 파일   | 설명                                              |
+|--------|--------------------------------------------------|
+| `.mcs` | FPGA 설정 데이터 (Intel HEX 포맷) - Flash에 기록되는 실제 데이터 |
+| `.prm` | Flash 프로그래밍 명령 시퀀스 파일 - Vivado가 Flash를 기록할 때 사용하는 내부 지시서 |
+
+> **둘 다 필요합니다.** Vivado가 프로그래밍 시 `.prm` 파일을 참조하여 적절한 erase/program 명령을 보냅니다.
 
 ---
 
@@ -19,17 +30,14 @@ Basys 3 보드는 Xilinx XC7A35T FPGA와 Quad SPI Flash (Winbond W25Q128, 16MB)�
 
 1. Hardware Manager에서 FPGA 디바이스를 마우스 오른쪽 클릭
 2. **Add Configuration Memory Device...** 선택
-3. Memory Part 검색창에서 이하 입력:
+3. Memory Part 검색창에서以下 입력:
 
    | 항목       | 값                              |
    |-----------|----------------------------------|
-   | Manufacturer | Spansion (또는 Macronix)       |
-   | Type        | FlasH                           |
-   | Density     | 128Mb                           |
-   | Part Name   | **MX25L3273F**(인력개발원) 9**S25FL128Sxxxxxx0** 또는 **MX25L12833F**) |
-
-   > Basys 3 rev. C 이상: Spansion S25FL128S 사용
-   > Basys 3 rev. D 이상: Macronix MX25L12833F 사용
+   | Manufacturer | Macronix                      |
+   | Type        | SPI Flash                      |
+   | Density     | 32Mb                           |
+   | Part Name   | **MX25L3273F**                  |
 
 4. **OK** 클릭
 
@@ -42,60 +50,71 @@ Basys 3 보드는 Xilinx XC7A35T FPGA와 Quad SPI Flash (Winbond W25Q128, 16MB)�
 3. Program Configuration Memory 창에서 **Program** 클릭
 4. 자동으로 `.bit` → `.mcs` 변환 후 Flash 기록이 수행됨
 
-### 수동으로 MCS 파일 생성 방법
-
-Hardware Manager Tcl 콘솔에서:
-
-```tcl
-cd "C:/Users/Administrator/Desktop/Basys-3-GPIO-hw.xpr/hw"
-write_cfgmem -format MCS -size 16 -interface SPIx4 -loadbit "up 0x0 ./hw.runs/impl_1/GPIO_demo.bit" -file ./flash_output.mcs -force
-```
-
-> **참고:** Basys 3는 QSPI이므로 interface는 자동 감지됩니다.
-> Vivado 2022.2 기준 `-interface SPIx4`가 기본값입니다.
-
 ---
 
 ## 방법 2: Vivado Tcl 콘솔 사용 (CLI)
+
+### 중요: Tcl 경로 형식
+
+Vivado Tcl 콘솔에서는 반드시 **'/'(forward slash)**를 사용해야 합니다.
+백슬래시(`\`)는 Tcl escape 문자로 해석되어 경로 오류가 발생합니다.
+
+```tcl
+# 올바른 경로 이동
+cd "C:/Users/Administrator/Desktop/Basys-3-GPIO-hw.xpr/hw"
+
+# 잘못된 경로 이동 (백슬래시 사용)
+# cd "C:\Users\Administrator\Desktop\Basys-3-GPIO-hw.xpr\hw"  ← 오류 발생
+```
 
 ### 1단계: Vivado Tcl Console 열기
 
 Vivado 메뉴: **Tools → Run Tcl Command...** 또는 하단 Tcl Console 탭
 
-### 2단계: 비트스트림을 MCS로 변환
+### 2단계: 디렉토리 변경
 
 ```tcl
-write_cfgmem -format MCS -size 16 -interface SPIx4 -loadbit "0x0 C:/Users/Administrator/Desktop/Basys-3-GPIO-hw.xpr/hw/hw.runs/impl_1/GPIO_demo.bit" -file C:/Users/Administrator/Desktop/flash_output.mcs -force
+cd "C:/Users/Administrator/Desktop/Basys-3-GPIO-hw.xpr/hw"
 ```
 
-| 옵션        | 설명                                    |
-|------------|----------------------------------------|
-| `-format MCS` | 출력 포맷 (MCS, HEX 등 가능)           |
-| `-size 16`    | Flash 크기 (16MB = 128Mbit)           |
-| `-interface SPIx4` | Basys 3 QSPI 인터페이스          |
-| `-loadbit`    | 입력 비트스트림 파일 경로              |
-| `-file`       | 출력 MCS 파일 경로                     |
-| `-force`      | 기존 파일 덮어쓰기                    |
+### 3단계: 비트스트림을 MCS로 변환
 
-### 3단계: Flash에 기록
+```tcl
+write_cfgmem -format MCS -size 4 -interface SPIx4 -loadbit "up 0x0 ./hw.runs/impl_1/GPIO_demo.bit" -file ./flash_output.mcs -force
+```
+
+| 옵션            | 설명                                    |
+|----------------|----------------------------------------|
+| `-format MCS`  | 출력 포맷 (MCS, HEX 등 가능)           |
+| `-size 4`      | Flash 크기 (4MB = 32Mbit, MX25L3273F) |
+| `-interface SPIx4` | Basys 3 QSPI 인터페이스          |
+| `-loadbit`     | `"up 0x0 <bitfile>"` 형식 (keyword 필수) |
+| `-file`        | 출력 MCS 파일 경로                     |
+| `-force`       | 기존 파일 덮어쓰기                    |
+
+> **주의:** `-loadbit` 값에는 반드시 `up` 또는 `down` 키워드가 포함되어야 합니다.
+> 잘못된 예: `"0x0 ./file.bit"` → 올바른 예: `"up 0x0 ./file.bit"`
+
+### 4단계: Flash에 기록
 
 ```tcl
 open_hw_manager
 connect_hw_server
 open_hw_target
 set_property PROGRAM.FILE {C:/Users/Administrator/Desktop/flash_output.mcs} [current_hw_device]
-program_hw_cfgmem -hw_cfgmem [get_cfgmem_parts {s25fl128sxxxxxx0-1.2}]
+program_hw_cfgmem -hw_cfgmem [get_cfgmem_parts {mx25l3273f-spi-x1_x2_x4}]
 ```
 
 ### 전체 자동화 스크립트 예시
 
 ```tcl
 # 설정
-set BIT_FILE "C:/Users/Administrator/Desktop/Basys-3-GPIO-hw.xpr/hw/hw.runs/impl_1/GPIO_demo.bit"
-set MCS_FILE "C:/Users/Administrator/Desktop/flash_output.mcs"
+cd "C:/Users/Administrator/Desktop/Basys-3-GPIO-hw.xpr/hw"
+set BIT_FILE "./hw.runs/impl_1/GPIO_demo.bit"
+set MCS_FILE "./flash_output.mcs"
 
 # 1. MCS 파일 생성
-write_cfgmem -format MCS -size 16 -interface SPIx4 -loadbit "0x0 $BIT_FILE" -file $MCS_FILE -force
+write_cfgmem -format MCS -size 4 -interface SPIx4 -loadbit "up 0x0 $BIT_FILE" -file $MCS_FILE -force
 
 # 2. 하드웨어 연결
 open_hw_manager
@@ -103,7 +122,7 @@ connect_hw_server
 open_hw_target
 
 # 3. 프로그래밍
-set cfgmem_part "s25fl128sxxxxxx0-1.2"
+set cfgmem_part "mx25l3273f-spi-x1_x2_x4"
 create_hw_cfgmem -hw_device [lindex [get_hw_devices] 0] -mem_dev [get_cfgmem_parts $cfgmem_part]
 set cfgmem [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices] 0]]
 set_property PROGRAM.ADDRESS_RANGE  {use_file} $cfgmem
@@ -123,7 +142,7 @@ disconnect_hw_server
 
 ---
 
-## 방법 3: vitis-ide (Unified IDE) 사용
+## 방법 3: Vitis Unified IDE 사용
 
 1. Vitis에서 **Xilinx → Program Device** 메뉴 사용
 2. Flash 선택 시 **Configuration Memory File** 옵션 선택
@@ -176,20 +195,42 @@ read_cfgmem -hardware [get_hw_devices xc7a35t_0] -file ./flash_readback.bin -for
 | 부팅 시 FPGA 동작 안 함        | JP4 jumper가 QSPI 위치인지 확인               |
 | MCS 파일 생성 실패            | 비트스트림 파일 경로 확인, -force 옵션 사용   |
 | Flash 파트 인식 실패          | Basys 3 리비전 확인 후 해당 파트 사용          |
+| Cannot parse string error     | `-loadbit`에 `up` 키워드 추가 필요           |
+| cd 경로 오류                  | 백슬래시 대신 슬래시(`/`) 사용               |
+| BPIx16 interface error        | `-interface SPIx4` 로 변경 필요              |
+
+### 자주 발생하는 write_cfgmem 오류
+
+**오류 1: Cannot parse string**
+```
+ERROR: [Writecfgmem 68-6] Cannot parse string "0x0 ./hw.runs/impl_1/GPIO_demo.bit".
+```
+**원인:** `-loadbit` 값에 `up` 키워드 누락
+**해결:** `"up 0x0 ./hw.runs/impl_1/GPIO_demo.bit"` 으로 변경
+
+**오류 2: BPIx16 interface 오류**
+```
+INFO: [Writecfgmem 68-23] Start address provided has been multiplied by a factor of 2 due to the use of interface BPIX16.
+```
+**원인:** Basys 3는 SPI Flash인데 BPIx16 지정
+**해결:** `-interface SPIx4` 로 변경
 
 ---
 
 ## Basys 3 Flash 디바이스 파트 번호 참고
 
-| 리비전 | Flash 칩                 | Vivado 파트 번호                     |
-|--------|--------------------------|--------------------------------------|
-| Rev. C | Spansion S25FL128S       | s25fl128sxxxxxx0-1.2                |
-| Rev. D | Macronix MX25L12833F     | mx25l12833f-spi-x1_x2_x4           |
+| Flash 칩                 | 크기      | Vivado 파트 번호                     |
+|--------------------------|----------|--------------------------------------|
+| Macronix MX25L3273F      | 32Mbit   | mx25l3273f-spi-x1_x2_x4            |
+| Macronix MX25L12833F     | 128Mbit  | mx25l12833f-spi-x1_x2_x4           |
+| Spansion S25FL128S       | 128Mbit  | s25fl128sxxxxxx0-1.2                |
 
-> Basys 3 리비전은 보드 하단 스티커에서 확인할 수 있습니다.
+> 보드에 장착된 Flash 칩은 보드 하단에서 확인할 수 있습니다.
 
 ---
 
 *작성일: 2026-07-12*
+*최종 수정: 2026-07-12*
 *대상 프로젝트: hw.xpr (xc7a35tcpg236-1, Basys 3)*
 *비트스트림 파일: hw.runs/impl_1/GPIO_demo.bit*
+*Flash 칩: Macronix MX25L3273F (32Mbit/4MB)*
