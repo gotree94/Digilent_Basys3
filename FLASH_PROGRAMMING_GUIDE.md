@@ -19,7 +19,7 @@ Basys 3 보드는 Xilinx XC7A35T FPGA와 Quad SPI Flash (Winbond W25Q128, 16MB)�
 
 1. Hardware Manager에서 FPGA 디바이스를 마우스 오른쪽 클릭
 2. **Add Configuration Memory Device...** 선택
-3. Memory Part 검색창에서以下 입력:
+3. Memory Part 검색창에서 이하 입력:
 
    | 항목       | 값                              |
    |-----------|----------------------------------|
