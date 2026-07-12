@@ -28,6 +28,8 @@ Basys 3 보드는 Xilinx XC7A35T FPGA와 Quad SPI Flash (Winbond W25Q128, 16MB)�
    | Density     | 128Mb                           |
    | Part Name   | **S25FL128Sxxxxxx0** 또는 **MX25L12833F** |
 
+* **MX25L3273F**
+
    > Basys 3 rev. C 이상: Spansion S25FL128S 사용
    > Basys 3 rev. D 이상: Macronix MX25L12833F 사용
 
