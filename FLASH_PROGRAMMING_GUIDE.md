@@ -47,6 +47,7 @@ Basys 3 보드는 Xilinx XC7A35T FPGA와 Quad SPI Flash (Winbond W25Q128, 16MB)�
 Hardware Manager Tcl 콘솔에서:
 
 ```tcl
+cd "C:/Users/Administrator/Desktop/Basys-3-GPIO-hw.xpr/hw"
 write_cfgmem -format MCS -size 16 -interface BPIx16 -loadbit "0x0 ./hw.runs/impl_1/GPIO_demo.bit" -file ./flash_output.mcs -force
 ```
 
